@@ -1,0 +1,294 @@
+import React, { useState } from 'react';
+import {
+  ExternalLink,
+  Phone,
+  Globe,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Copy,
+  Check,
+  SearchX,
+  Compass,
+} from 'lucide-react';
+import { BusinessLead } from '../types';
+
+interface LeadTableProps {
+  leads: BusinessLead[];
+  onSelectLead: (lead: BusinessLead) => void;
+  isLoading: boolean;
+  hasSearched: boolean;
+  onResetFilters?: () => void;
+  isFilteredEmpty?: boolean;
+}
+
+export const LeadTable: React.FC<LeadTableProps> = ({
+  leads,
+  onSelectLead,
+  isLoading,
+  hasSearched,
+  onResetFilters,
+  isFilteredEmpty,
+}) => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Pagination calculation
+  const totalItems = leads.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const paginatedLeads = leads.slice(startIndex, endIndex);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  if (!hasSearched && !isLoading) {
+    return (
+      <div className="empty-state-card">
+        <div className="empty-state-icon">
+          <Compass className="w-10 h-10 text-blue-500" />
+        </div>
+        <h3 className="empty-state-title">Ready to Prospect</h3>
+        <p className="empty-state-desc">
+          Enter a city or metropolitan area above and select a business category to retrieve verified OpenStreetMap commercial listings.
+        </p>
+      </div>
+    );
+  }
+
+  if (hasSearched && totalItems === 0 && !isLoading) {
+    if (isFilteredEmpty) {
+      return (
+        <div className="empty-state-card">
+          <div className="empty-state-icon">
+            <SearchX className="w-10 h-10 text-amber-500" />
+          </div>
+          <h3 className="empty-state-title">No Listings Match Current Filters</h3>
+          <p className="empty-state-desc">
+            Try loosening your keyword search, or toggle off the "Has Phone" / "Has Website" filter switches.
+          </p>
+          {onResetFilters && (
+            <button
+              type="button"
+              className="btn btn-secondary mt-4"
+              onClick={onResetFilters}
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="empty-state-card">
+        <div className="empty-state-icon">
+          <SearchX className="w-10 h-10 text-slate-400" />
+        </div>
+        <h3 className="empty-state-title">No Mapped Businesses Found</h3>
+        <p className="empty-state-desc">
+          OpenStreetMap does not have mapped entities matching this category in the specified boundary.
+          Try searching for a larger neighboring city or a broader related category.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="table-card">
+      <div className="table-container">
+        <table className="leads-table">
+          <thead>
+            <tr>
+              <th className="th-name">Business Name</th>
+              <th className="th-category">Category</th>
+              <th className="th-contact">Phone</th>
+              <th className="th-web">Website</th>
+              <th className="th-address">Location & Address</th>
+              <th className="th-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedLeads.map((lead) => {
+              const displayName = lead.name || (
+                <span className="text-slate-400 italic">Unnamed entity</span>
+              );
+
+              return (
+                <tr key={lead.id} className="table-row">
+                  {/* Business Name */}
+                  <td className="td-name">
+                    <div className="lead-name-cell">
+                      <span className="lead-title">{displayName}</span>
+                      <span className="lead-osm-id">{lead.id}</span>
+                    </div>
+                  </td>
+
+                  {/* Category */}
+                  <td className="td-category">
+                    <span className="category-tag">
+                      {lead.category_label || lead.category}
+                    </span>
+                  </td>
+
+                  {/* Phone */}
+                  <td className="td-contact">
+                    {lead.phone ? (
+                      <div className="contact-pill-wrapper">
+                        <a
+                          href={`tel:${lead.phone}`}
+                          className="contact-pill phone-pill"
+                          title="Click to call"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-blue-600 mr-1" />
+                          <span>{lead.phone}</span>
+                        </a>
+                        <button
+                          type="button"
+                          className="copy-btn"
+                          onClick={() => handleCopy(lead.phone, `phone-${lead.id}`)}
+                          title="Copy phone"
+                        >
+                          {copiedId === `phone-${lead.id}` ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="missing-pill">Not mapped</span>
+                    )}
+                  </td>
+
+                  {/* Website */}
+                  <td className="td-web">
+                    {lead.website ? (
+                      <div className="contact-pill-wrapper">
+                        <a
+                          href={lead.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="contact-pill web-pill"
+                          title={lead.website}
+                        >
+                          <Globe className="w-3.5 h-3.5 text-indigo-600 mr-1" />
+                          <span className="truncate max-w-[140px]">
+                            {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
+                          </span>
+                          <ExternalLink className="w-3 h-3 text-slate-400 ml-1 inline" />
+                        </a>
+                      </div>
+                    ) : (
+                      <span className="missing-pill">Not mapped</span>
+                    )}
+                  </td>
+
+                  {/* Address */}
+                  <td className="td-address">
+                    <div className="address-cell">
+                      {lead.address ? (
+                        <span className="address-text" title={lead.address}>
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 inline mr-1 flex-shrink-0" />
+                          {lead.address}
+                        </span>
+                      ) : lead.city ? (
+                        <span className="address-city-only">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 inline mr-1 flex-shrink-0" />
+                          {lead.city}
+                        </span>
+                      ) : (
+                        <span className="missing-pill">Address not mapped</span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Actions */}
+                  <td className="td-actions">
+                    <div className="table-actions-group">
+                      <button
+                        type="button"
+                        className="action-icon-btn"
+                        onClick={() => onSelectLead(lead)}
+                        title="View Full OSM Details"
+                      >
+                        <Eye className="w-4 h-4 text-slate-600 hover:text-blue-600" />
+                      </button>
+                      <a
+                        href={lead.osm_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="action-icon-btn"
+                        title="View on OpenStreetMap"
+                      >
+                        <ExternalLink className="w-4 h-4 text-slate-400 hover:text-blue-600" />
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Footer */}
+      <div className="pagination-footer">
+        <div className="pagination-info">
+          Showing <strong>{startIndex + 1}</strong> to <strong>{endIndex}</strong> of{' '}
+          <strong>{totalItems}</strong> entries
+        </div>
+
+        <div className="pagination-controls">
+          <div className="page-size-selector">
+            <span className="page-size-label">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="page-size-select"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <div className="page-nav-buttons">
+            <button
+              type="button"
+              className="page-nav-btn"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="page-current-indicator">
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="page-nav-btn"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
