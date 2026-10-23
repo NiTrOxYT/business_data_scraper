@@ -1,5 +1,6 @@
 """
-Pydantic Schemas for Business Data Scraper API.
+Pydantic Schemas for Free Business Data Scraper API.
+Includes robust field validations, search area metadata, and diagnostics.
 """
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
@@ -41,6 +42,11 @@ class SearchDiagnostics(BaseModel):
     deduplicated_count: int
     final_count: int
     bounding_box: List[float]
+    search_area_type: str = "administrative_boundary"
+    search_area_description: str = ""
+    resolved_location: str = ""
+    center_coordinates: Optional[List[float]] = None
+    radius_km: Optional[float] = None
 
 
 class SearchResponse(BaseModel):
@@ -50,11 +56,16 @@ class SearchResponse(BaseModel):
     category_label: str
     keyword: Optional[str] = None
     radius_km: Optional[float] = None
+    search_area_type: str = "administrative_boundary"
     bounding_box: List[float] = Field(description="[south, west, north, east]")
     total_found: int
     listings: List[BusinessLead]
     attribution: str = "Data © OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright)"
-    notice: str = "OpenStreetMap is a community-driven map and not an exhaustive commercial directory. Business listings and contact information may be incomplete, unverified, or outdated."
+    notice: str = (
+        "OpenStreetMap is a community-driven open database. Listing coverage, commercial details, and contact "
+        "information depend on voluntary community tagging and may be incomplete, unverified, or outdated compared "
+        "to proprietary directories. This service is not affiliated with or extracted from Google Maps."
+    )
     cached: bool = False
     diagnostics: Optional[SearchDiagnostics] = None
 
@@ -86,7 +97,7 @@ class HealthResponse(BaseModel):
 
 
 class ExportFilteredRequest(BaseModel):
-    location: str
-    category: str
-    format: str = "csv"  # "csv" or "excel"
-    listings: List[BusinessLead]
+    location: str = Field(..., min_length=1, max_length=100)
+    category: str = Field(..., min_length=1, max_length=50)
+    format: str = Field(default="csv", pattern="^(csv|excel)$")
+    listings: List[BusinessLead] = Field(..., min_length=1, max_length=2000)

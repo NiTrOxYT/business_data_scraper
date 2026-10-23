@@ -662,9 +662,13 @@ async def search_business_leads(
         
         # Calculate bounding box (Radius mode vs Administrative Boundary)
         if radius_km and radius_km > 0:
-            center_lat = geocode_info.get("lat") or ((geocode_info["bounding_box"][0] + geocode_info["bounding_box"][2]) / 2.0)
-            center_lon = geocode_info.get("lon") or ((geocode_info["bounding_box"][1] + geocode_info["bounding_box"][3]) / 2.0)
-            
+            search_area_type = "radius"
+            center_lat = geocode_info.get("lat")
+            center_lon = geocode_info.get("lon")
+            if center_lat is None or center_lon is None:
+                center_lat = (geocode_info["bounding_box"][0] + geocode_info["bounding_box"][2]) / 2.0
+                center_lon = (geocode_info["bounding_box"][1] + geocode_info["bounding_box"][3]) / 2.0
+
             delta_lat = radius_km / 111.0
             cos_lat = max(0.1, abs(math.cos(math.radians(center_lat))))
             delta_lon = radius_km / (111.0 * cos_lat)
@@ -673,15 +677,22 @@ async def search_business_leads(
             delta_lat = min(delta_lat, MAX_BBOX_SPAN_DEGREES / 2.0)
             delta_lon = min(delta_lon, MAX_BBOX_SPAN_DEGREES / 2.0)
 
-            south = center_lat - delta_lat
-            north = center_lat + delta_lat
-            west = center_lon - delta_lon
-            east = center_lon + delta_lon
+            south = max(-90.0, center_lat - delta_lat)
+            north = min(90.0, center_lat + delta_lat)
+            west = max(-180.0, center_lon - delta_lon)
+            east = min(180.0, center_lon + delta_lon)
             bbox = [south, west, north, east]
-            logger.info(f"Calculated spatial radius bounding box for r={radius_km}km: bbox={bbox}")
+            center_coords = [center_lat, center_lon]
+            search_area_desc = f"{radius_km:.1f} km radius centered at ({center_lat:.4f}, {center_lon:.4f})"
+            logger.info(f"Calculated spatial radius bounding box: {search_area_desc} -> bbox={bbox}")
         else:
+            search_area_type = "administrative_boundary"
             bbox = geocode_info["bounding_box"]
             south, west, north, east = bbox[0], bbox[1], bbox[2], bbox[3]
+            center_lat = geocode_info.get("lat") or ((south + north) / 2.0)
+            center_lon = geocode_info.get("lon") or ((west + east) / 2.0)
+            center_coords = [center_lat, center_lon]
+            search_area_desc = f"Administrative municipal boundary [{south:.4f}, {west:.4f}, {north:.4f}, {east:.4f}]"
 
         leads: List[BusinessLead] = []
         seen_ids = set()
@@ -749,11 +760,16 @@ async def search_business_leads(
             deduplicated_count=deduplicated_count,
             final_count=final_count,
             bounding_box=bbox,
+            search_area_type=search_area_type,
+            search_area_description=search_area_desc,
+            resolved_location=geocode_info["display_name"],
+            center_coordinates=center_coords,
+            radius_km=radius_km,
         )
 
         logger.info(
             f"Search Complete: location='{loc_clean}' category='{cat_clean}' "
-            f"keyword='{clean_kw or ''}' radius={radius_km or 'auto'} "
+            f"keyword='{clean_kw or ''}' radius={radius_km or 'auto'} ({search_area_type}) "
             f"source='{data_source}' upstream={upstream_count} parsed={parsed_count} "
             f"deduped={deduplicated_count} final={final_count}"
         )
@@ -765,6 +781,7 @@ async def search_business_leads(
             category_label=cat_def["label"],
             keyword=clean_kw,
             radius_km=radius_km,
+            search_area_type=search_area_type,
             bounding_box=bbox,
             total_found=final_count,
             listings=final_listings,

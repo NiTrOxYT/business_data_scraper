@@ -206,9 +206,15 @@ def get_category_definition(category_id: str) -> Dict[str, Any]:
 
 
 def sanitize_overpass_keyword(keyword: str) -> str:
-    """Sanitizes user keyword to prevent Overpass QL regex injection."""
-    clean = re.sub(r'[\"\'\\/\[\]\(\)\{\}\^\$\*\+\?\.\<\>\:\;\=\!\|]', '', keyword).strip()
-    return clean[:50]
+    """
+    Sanitizes user keyword to prevent Overpass QL regex injection, quote escaping,
+    and syntax errors. Permits only alphanumeric characters, spaces, and hyphens.
+    """
+    if not keyword:
+        return ""
+    clean = re.sub(r"[^a-zA-Z0-9\s\-]", "", str(keyword)).strip()
+    clean = re.sub(r"\s+", " ", clean)
+    return clean[:40]
 
 
 def build_overpass_category_query(

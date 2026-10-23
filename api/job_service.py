@@ -1,7 +1,13 @@
 """
 In-Memory Search Job / Run Registry for Apify-Style Execution Tracking.
 Maintains history of scraping jobs with status, duration, record counts, and parameters.
-Lightweight, zero external database requirements.
+
+NOTE ON STORAGE & LIFECYCLE:
+This registry stores job runs in an in-memory dictionary capped at MAX_JOBS_STORED (50).
+- In local development, history is preserved for the lifetime of the server process.
+- In serverless hosting (e.g. Vercel), history is instance-bound and resets when execution
+  containers recycle or scale across multiple instances. It is NOT persistent across cold starts.
+- This design intentionally avoids heavy external databases, paid Redis queues, and subscription services.
 """
 from datetime import datetime, timezone
 import time

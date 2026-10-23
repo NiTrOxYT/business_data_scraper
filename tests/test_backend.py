@@ -656,3 +656,78 @@ def test_api_search_and_exports_mocked():
         assert excel_resp.status_code == 200
         assert "openxmlformats" in excel_resp.headers["content-type"]
         assert excel_resp.content.startswith(b"PK")
+
+
+# -------------------------------------------------------------------------
+# 11. Export-Filtered (Selected Leads) API Tests
+# -------------------------------------------------------------------------
+def test_api_export_filtered_csv_and_excel():
+    payload = {
+        "location": "Austin",
+        "category": "electronics",
+        "format": "csv",
+        "listings": [
+            {
+                "id": "node/101",
+                "name": "Selected Lead 1",
+                "category": "electronics",
+                "category_label": "Electronics Shops & Suppliers",
+                "phone": "+1 512-555-1234",
+                "website": "https://lead1.example.com",
+                "email": "lead1@example.com",
+                "address": "123 Austin Blvd",
+                "city": "Austin",
+                "postcode": "78701",
+                "lat": 30.26,
+                "lon": -97.74,
+                "osm_type": "node",
+                "osm_id": 101,
+                "osm_url": "https://www.openstreetmap.org/node/101",
+                "data_source": "OpenStreetMap",
+                "search_timestamp": "2026-10-23T06:30:00Z",
+                "tags": {},
+            }
+        ],
+    }
+
+    # CSV
+    csv_resp = client.post("/api/export-filtered", json=payload)
+    assert csv_resp.status_code == 200
+    assert "text/csv" in csv_resp.headers["content-type"]
+    assert "Selected Lead 1" in csv_resp.text
+    assert "lead1@example.com" in csv_resp.text
+
+    # Excel
+    payload["format"] = "excel"
+    excel_resp = client.post("/api/export-filtered", json=payload)
+    assert excel_resp.status_code == 200
+    assert "openxmlformats" in excel_resp.headers["content-type"]
+    assert excel_resp.content.startswith(b"PK")
+
+    # Invalid empty listings payload rejected
+    bad_payload = {"location": "Austin", "category": "electronics", "format": "csv", "listings": []}
+    bad_resp = client.post("/api/export-filtered", json=bad_payload)
+    assert bad_resp.status_code == 422
+
+
+# -------------------------------------------------------------------------
+# 12. Location & Category Change Queries Verification
+# -------------------------------------------------------------------------
+def test_location_and_category_change_variations():
+    # Category 1: restaurants_cafes
+    q1 = build_overpass_category_query("restaurants_cafes", 51.4, -0.2, 51.6, 0.0)
+    assert '["amenity"="restaurant"]' in q1
+    assert '["amenity"="cafe"]' in q1
+    assert "51.400000,-0.200000,51.600000,0.000000" in q1
+
+    # Category 2: hotels
+    q2 = build_overpass_category_query("hotels", 30.1, -97.8, 30.4, -97.6)
+    assert '["tourism"="hotel"]' in q2
+    assert '["tourism"="motel"]' in q2
+    assert "30.100000,-97.800000,30.400000,-97.600000" in q2
+
+    # Category 3: repair_services
+    q3 = build_overpass_category_query("repair_services", 22.4, 88.2, 22.7, 88.5)
+    assert '["shop"="car_repair"]' in q3
+    assert '["craft"="electronics_repair"]' in q3
+    assert "22.400000,88.200000,22.700000,88.500000" in q3

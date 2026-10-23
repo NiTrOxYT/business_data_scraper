@@ -227,7 +227,7 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
         {/* Modal Footer */}
         <div className="modal-footer">
           <div className="jobs-modal-footer-notice">
-            Zero third-party scraper fees &middot; Complies with OpenStreetMap rate limits and ODbL licensing.
+            Session audit log: maintained in memory without paid databases. Resets when serverless instances recycle. Complies with OpenStreetMap rate limits and ODbL licensing.
           </div>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Close
