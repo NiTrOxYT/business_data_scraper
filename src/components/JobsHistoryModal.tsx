@@ -49,14 +49,17 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
         <div className="modal-header">
           <div className="modal-title-group">
             <div className="jobs-modal-icon">
-              <History className="w-5 h-5 text-blue-600" />
+              <History className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h2 id="jobs-modal-title" className="modal-title">
-                Scraper Runs & Task Jobs
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 id="jobs-modal-title" className="modal-title">
+                  Scraper Execution Runs
+                </h2>
+                <span className="jobs-header-badge">Aveniq Audit Log</span>
+              </div>
               <p className="modal-subtitle">
-                Apify-style audit log of scraping executions, records extracted, and data provenance.
+                Live session audit trail of scraping runs, records harvested, and data provenance.
               </p>
             </div>
           </div>
@@ -66,9 +69,9 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
               className="action-icon-btn mr-2"
               onClick={onRefreshJobs}
               disabled={isLoading}
-              title="Refresh Job History"
+              title="Refresh Task Runs"
             >
-              <RotateCw className={`w-4 h-4 text-slate-500 ${isLoading ? 'animate-spin' : ''}`} />
+              <RotateCw className={`w-4 h-4 text-slate-400 hover:text-white ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
               type="button"
@@ -76,7 +79,7 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
               onClick={onClose}
               aria-label="Close jobs modal"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-slate-400 hover:text-white" />
             </button>
           </div>
         </div>
@@ -85,10 +88,12 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
         <div className="modal-body jobs-modal-body">
           {jobs.length === 0 ? (
             <div className="empty-jobs-state">
-              <History className="w-10 h-10 text-slate-300 mb-2" />
-              <p className="text-slate-600 font-medium">No Scraping Jobs Recorded Yet</p>
-              <p className="text-slate-400 text-xs mt-1">
-                Run a search from the dashboard to initiate your first business data scraping task.
+              <div className="empty-jobs-icon">
+                <History className="w-8 h-8 text-indigo-400" />
+              </div>
+              <p className="empty-jobs-title">No Extraction Runs Recorded</p>
+              <p className="empty-jobs-desc">
+                Launch a search query from the Aveniq dashboard to record your first automated scraping task.
               </p>
             </div>
           ) : (
@@ -111,31 +116,31 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
                         {isRunning && (
                           <span className="job-status-badge running">
                             <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-                            Running
+                            Active
                           </span>
                         )}
                         {isCompleted && (
                           <span className="job-status-badge completed">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mr-1" />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mr-1" />
                             Completed
                           </span>
                         )}
                         {isFailed && (
                           <span className="job-status-badge failed">
-                            <AlertCircle className="w-3.5 h-3.5 text-red-600 mr-1" />
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-400 mr-1" />
                             Failed
                           </span>
                         )}
 
-                        <span className="job-id-tag">{job.id}</span>
+                        <span className="job-id-tag font-mono">{job.id}</span>
                         {job.cached && <span className="job-cached-pill">Cache Hit</span>}
                       </div>
 
                       <div className="job-time-info">
                         <Clock className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-                        <span>{formattedDate}</span>
+                        <span className="font-mono">{formattedDate}</span>
                         {job.duration_seconds !== null && job.duration_seconds !== undefined && (
-                          <span className="job-duration-pill">{job.duration_seconds}s</span>
+                          <span className="job-duration-pill font-mono">{job.duration_seconds}s</span>
                         )}
                       </div>
                     </div>
@@ -143,7 +148,8 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
                     <div className="job-card-body">
                       <div className="job-params-row">
                         <span className="job-target-headline">
-                          <strong>{job.location}</strong> &middot; {job.category_label || job.category}
+                          <strong className="text-white">{job.location}</strong> &middot;{' '}
+                          <span className="text-indigo-300">{job.category_label || job.category}</span>
                         </span>
                         {job.keyword && (
                           <span className="job-param-pill">Keyword: "{job.keyword}"</span>
@@ -156,25 +162,25 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
 
                       <div className="job-stats-row">
                         <div className="job-stat">
-                          <span className="stat-num">{job.records_found}</span>
-                          <span className="stat-label">Records Found</span>
+                          <span className="stat-num text-white font-mono">{job.records_found}</span>
+                          <span className="stat-label">Records Harvested</span>
                         </div>
                         <div className="job-stat">
-                          <span className="stat-num">{job.duplicates_removed}</span>
+                          <span className="stat-num text-slate-400 font-mono">{job.duplicates_removed}</span>
                           <span className="stat-label">Duplicates Filtered</span>
                         </div>
                         <div className="job-stat">
-                          <span className="stat-source">
-                            <Database className="w-3 h-3 inline mr-1 text-slate-400" />
+                          <span className="stat-source text-cyan-300 truncate max-w-[200px]" title={job.data_source}>
+                            <Database className="w-3 h-3 inline mr-1 text-cyan-400" />
                             {job.data_source}
                           </span>
-                          <span className="stat-label">Origin Source</span>
+                          <span className="stat-label">Origin Pipeline</span>
                         </div>
                       </div>
 
                       {job.error && (
                         <div className="job-error-banner">
-                          <AlertCircle className="w-4 h-4 text-red-500 mr-1.5 flex-shrink-0" />
+                          <AlertCircle className="w-4 h-4 text-rose-400 mr-1.5 flex-shrink-0" />
                           <span>{job.error}</span>
                         </div>
                       )}
@@ -185,12 +191,12 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
                       <div className="job-actions-left">
                         <button
                           type="button"
-                          className="btn-link text-xs"
+                          className="btn-rerun-job"
                           onClick={() => onRerunJob(job)}
                           title="Re-run search with these parameters"
                         >
-                          <RotateCw className="w-3 h-3 mr-1 inline" />
-                          Re-run Scraper
+                          <RotateCw className="w-3.5 h-3.5 mr-1.5 inline text-indigo-400" />
+                          <span>Re-run Query</span>
                         </button>
                       </div>
 
@@ -202,8 +208,8 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
                           disabled={job.records_found === 0}
                           title="Download CSV extract for this run"
                         >
-                          <FileText className="w-3.5 h-3.5 mr-1 text-emerald-600 inline" />
-                          CSV
+                          <FileText className="w-3.5 h-3.5 mr-1 text-emerald-400 inline" />
+                          <span>CSV</span>
                         </button>
                         <button
                           type="button"
@@ -212,8 +218,8 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
                           disabled={job.records_found === 0}
                           title="Download Excel extract for this run"
                         >
-                          <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-blue-600 inline" />
-                          Excel (.xlsx)
+                          <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-cyan-400 inline" />
+                          <span>Excel (.xlsx)</span>
                         </button>
                       </div>
                     </div>
@@ -227,7 +233,7 @@ export const JobsHistoryModal: React.FC<JobsHistoryModalProps> = ({
         {/* Modal Footer */}
         <div className="modal-footer">
           <div className="jobs-modal-footer-notice">
-            Session audit log: maintained in memory without paid databases. Resets when serverless instances recycle. Complies with OpenStreetMap rate limits and ODbL licensing.
+            Aveniq session audit log: Maintained in-memory without paid databases. Resets when serverless instances recycle. Complies with OSM Foundation fair use and ODbL 1.0 licensing.
           </div>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Close

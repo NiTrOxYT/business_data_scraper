@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Loader2, MapPin, Tag, Compass, RotateCw, Filter, Navigation } from 'lucide-react';
+import { Search, Loader2, MapPin, Tag, Compass, RotateCw, Filter, Navigation, Sliders } from 'lucide-react';
 import { CategoryItem } from '../types';
 
 interface SearchFormProps {
@@ -25,7 +25,7 @@ interface SearchFormProps {
   isLoading: boolean;
 }
 
-const SAMPLE_LOCATIONS = ['Kolkata', 'Austin, TX', 'London', 'Berlin', 'Mumbai', 'Chicago'];
+const SAMPLE_LOCATIONS = ['Kolkata', 'Austin, TX', 'London', 'Berlin', 'Mumbai', 'Singapore'];
 
 export const SearchForm: React.FC<SearchFormProps> = ({
   categories,
@@ -48,11 +48,11 @@ export const SearchForm: React.FC<SearchFormProps> = ({
     e.preventDefault();
     const cleanLoc = location.trim();
     if (!cleanLoc) {
-      setValidationError('Please enter a city, town, or district name.');
+      setValidationError('Please enter a target city, region, or municipality.');
       return;
     }
     if (cleanLoc.length < 2) {
-      setValidationError('Location name must be at least 2 characters.');
+      setValidationError('Target location must be at least 2 characters.');
       return;
     }
     setValidationError('');
@@ -62,7 +62,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
   const handleRefreshClick = () => {
     const cleanLoc = location.trim();
     if (!cleanLoc) {
-      setValidationError('Please enter a location to refresh.');
+      setValidationError('Please enter a target location to refresh.');
       return;
     }
     setValidationError('');
@@ -79,12 +79,20 @@ export const SearchForm: React.FC<SearchFormProps> = ({
 
   return (
     <section className="search-card">
+      <div className="search-card-header">
+        <div className="search-card-title-group">
+          <Sliders className="w-4 h-4 text-indigo-400" />
+          <span className="search-card-title">Scraper Parameters</span>
+        </div>
+        <span className="search-card-badge">Overpass QL Engine</span>
+      </div>
+
       <form onSubmit={handleSubmit} className="search-form">
         <div className="search-grid-expanded">
           {/* Location input */}
-          <div className="form-group">
+          <div className="form-group form-group-location">
             <label htmlFor="search-location" className="form-label">
-              <MapPin className="w-4 h-4 text-slate-500 inline mr-1" />
+              <MapPin className="w-3.5 h-3.5 text-indigo-400 inline mr-1" />
               Target Location
             </label>
             <div className="input-wrapper">
@@ -98,7 +106,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                   if (validationError) setValidationError('');
                 }}
                 disabled={isLoading}
-                className="form-input"
+                className={`form-input ${validationError ? 'input-error' : ''}`}
+                autoComplete="off"
               />
             </div>
             {validationError ? (
@@ -109,10 +118,10 @@ export const SearchForm: React.FC<SearchFormProps> = ({
           </div>
 
           {/* Category Selector */}
-          <div className="form-group">
+          <div className="form-group form-group-category">
             <label htmlFor="search-category" className="form-label">
-              <Tag className="w-4 h-4 text-slate-500 inline mr-1" />
-              Business Category
+              <Tag className="w-3.5 h-3.5 text-cyan-400 inline mr-1" />
+              Business Sector
             </label>
             <div className="select-wrapper">
               <select
@@ -129,34 +138,37 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                 ))}
               </select>
             </div>
-            <p className="form-hint truncate">{currentCategoryDesc || 'Documented OSM tags queried'}</p>
+            <p className="form-hint truncate" title={currentCategoryDesc}>
+              {currentCategoryDesc || 'Documented OSM tags queried'}
+            </p>
           </div>
 
           {/* Custom Keyword Input */}
-          <div className="form-group">
+          <div className="form-group form-group-keyword">
             <label htmlFor="search-keyword" className="form-label">
-              <Filter className="w-4 h-4 text-slate-500 inline mr-1" />
-              Custom Keyword (Optional)
+              <Filter className="w-3.5 h-3.5 text-slate-400 inline mr-1" />
+              Keyword (Optional)
             </label>
             <div className="input-wrapper">
               <input
                 id="search-keyword"
                 type="text"
-                placeholder="e.g. audio, bakery, solar..."
+                placeholder="e.g. wholesale, solar, audio..."
                 value={keyword}
                 onChange={(e) => onKeywordChange(e.target.value)}
                 disabled={isLoading}
                 className="form-input"
+                autoComplete="off"
               />
             </div>
-            <p className="form-hint">Filters or searches specific trade name</p>
+            <p className="form-hint">Filters trade name or specialty</p>
           </div>
 
           {/* Search Radius / Area */}
-          <div className="form-group">
+          <div className="form-group form-group-radius">
             <label htmlFor="search-radius" className="form-label">
-              <Navigation className="w-4 h-4 text-slate-500 inline mr-1" />
-              Search Radius
+              <Navigation className="w-3.5 h-3.5 text-indigo-400 inline mr-1" />
+              Search Perimeter
             </label>
             <div className="select-wrapper">
               <select
@@ -176,13 +188,13 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                 <option value="50">50 km radius</option>
               </select>
             </div>
-            <p className="form-hint">Spatial bounding perimeter</p>
+            <p className="form-hint">Spatial bounding box</p>
           </div>
 
           {/* Result Limit Selector */}
-          <div className="form-group limit-group">
+          <div className="form-group form-group-limit">
             <label htmlFor="search-limit" className="form-label">
-              Max Results
+              Max Leads
             </label>
             <div className="select-wrapper">
               <select
@@ -204,7 +216,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
 
           {/* Search & Refresh Buttons */}
           <div className="form-action-group">
-            <label className="form-label">&nbsp;</label>
+            <label className="form-label form-label-hidden">&nbsp;</label>
             <div className="button-cluster">
               <button
                 id="search-button"
@@ -215,12 +227,12 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                    Scraping OSM...
+                    <span>Extracting...</span>
                   </>
                 ) : (
                   <>
                     <Search className="w-4 h-4 mr-2 inline" />
-                    Scrape Leads
+                    <span>Run Scraper</span>
                   </>
                 )}
               </button>
@@ -231,10 +243,10 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                 onClick={handleRefreshClick}
                 disabled={isLoading}
                 className="btn btn-secondary refresh-btn"
-                title="Bypass cache and query fresh OpenStreetMap data"
+                title="Bypass cache and query fresh OpenStreetMap upstream"
               >
-                <RotateCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                <span className="refresh-label">Refresh</span>
+                <RotateCw className={`w-4 h-4 text-slate-300 ${isLoading ? 'animate-spin' : ''}`} />
+                <span className="refresh-label">Fresh</span>
               </button>
             </div>
           </div>
@@ -243,8 +255,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({
         {/* Quick Location Chips */}
         <div className="quick-chips-row">
           <span className="chips-label">
-            <Compass className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-            Quick targets:
+            <Compass className="w-3.5 h-3.5 inline mr-1 text-indigo-400" />
+            Quick Presets:
           </span>
           <div className="chips-container">
             {SAMPLE_LOCATIONS.map((loc) => (

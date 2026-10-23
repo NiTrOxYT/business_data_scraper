@@ -24,9 +24,12 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
         {/* Modal Header */}
         <div className="modal-header">
           <div>
-            <span className="modal-category-badge">{lead.category_label || lead.category}</span>
+            <div className="modal-category-badge-wrap">
+              <span className="modal-category-badge">{lead.category_label || lead.category}</span>
+              <span className="modal-source-chip">{lead.data_source ? 'OSM Open Data' : 'ODbL 1.0'}</span>
+            </div>
             <h3 className="modal-title">{lead.name || 'Unnamed OpenStreetMap Entity'}</h3>
-            <span className="modal-subtitle">OSM ID: {lead.id}</span>
+            <span className="modal-subtitle font-mono">Entity ID: {lead.id}</span>
           </div>
           <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close modal">
             <X className="w-5 h-5" />
@@ -38,13 +41,13 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
           {/* Provenance Banner */}
           <div className="provenance-banner">
             <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span className="text-xs font-semibold text-slate-800">
-                Source: {lead.data_source || 'OpenStreetMap'}
+              <Database className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+              <span className="text-xs font-semibold text-slate-200">
+                Source: {lead.data_source || 'OpenStreetMap (Nominatim Bounded POI)'}
               </span>
             </div>
             {lead.search_timestamp && (
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-400 font-mono">
                 Extracted: {new Date(lead.search_timestamp).toLocaleString()}
               </span>
             )}
@@ -52,18 +55,18 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
 
           {/* Key Contact Summary */}
           <div className="modal-section">
-            <h4 className="modal-section-title">Verified Contact & Location</h4>
+            <h4 className="modal-section-title">Verified Commercial Contact & Location</h4>
             <div className="modal-info-grid">
               {/* Phone */}
               <div className="modal-info-item">
                 <span className="info-label">
                   <Phone className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-                  Phone Number
+                  Telephone Number
                 </span>
                 <span className="info-val">
                   {lead.phone ? (
-                    <div className="flex items-center gap-1.5">
-                      <a href={`tel:${lead.phone}`} className="link-text font-medium">
+                    <div className="flex items-center gap-2">
+                      <a href={`tel:${lead.phone}`} className="link-text font-medium font-mono">
                         {lead.phone}
                       </a>
                       <button
@@ -73,14 +76,14 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                         title="Copy phone"
                       >
                         {copiedField === 'phone' ? (
-                          <Check className="w-3 h-3 text-emerald-600" />
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
                         ) : (
-                          <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600" />
+                          <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
                         )}
                       </button>
                     </div>
                   ) : (
-                    <em className="text-slate-400">Not mapped in OpenStreetMap</em>
+                    <em className="text-slate-500">Unspecified in OpenStreetMap</em>
                   )}
                 </span>
               </div>
@@ -89,12 +92,12 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
               <div className="modal-info-item">
                 <span className="info-label">
                   <Mail className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-                  Email Address
+                  Direct Email
                 </span>
                 <span className="info-val">
                   {lead.email ? (
-                    <div className="flex items-center gap-1.5">
-                      <a href={`mailto:${lead.email}`} className="link-text font-medium text-emerald-700">
+                    <div className="flex items-center gap-2">
+                      <a href={`mailto:${lead.email}`} className="link-text font-medium text-emerald-400 font-mono">
                         {lead.email}
                       </a>
                       <button
@@ -104,14 +107,14 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                         title="Copy email"
                       >
                         {copiedField === 'email' ? (
-                          <Check className="w-3 h-3 text-emerald-600" />
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
                         ) : (
-                          <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600" />
+                          <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
                         )}
                       </button>
                     </div>
                   ) : (
-                    <em className="text-slate-400">Not mapped in OpenStreetMap</em>
+                    <em className="text-slate-500">Unspecified in OpenStreetMap</em>
                   )}
                 </span>
               </div>
@@ -120,7 +123,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
               <div className="modal-info-item full-width">
                 <span className="info-label">
                   <Globe className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-                  Website
+                  Online Portal / Website
                 </span>
                 <span className="info-val">
                   {lead.website ? (
@@ -130,11 +133,11 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                       rel="noopener noreferrer"
                       className="link-text flex items-center gap-1 font-medium"
                     >
-                      {lead.website}
-                      <ExternalLink className="w-3 h-3 inline" />
+                      <span>{lead.website}</span>
+                      <ExternalLink className="w-3.5 h-3.5 inline text-indigo-400" />
                     </a>
                   ) : (
-                    <em className="text-slate-400">Not mapped in OpenStreetMap</em>
+                    <em className="text-slate-500">Unspecified in OpenStreetMap</em>
                   )}
                 </span>
               </div>
@@ -147,7 +150,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 </span>
                 <span className="info-val">
                   {lead.address || lead.city || (
-                    <em className="text-slate-400">No structured street address tagged</em>
+                    <em className="text-slate-500">No structured street address tagged</em>
                   )}
                 </span>
               </div>
@@ -157,11 +160,25 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 <div className="modal-info-item full-width">
                   <span className="info-label">
                     <Navigation className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-                    Coordinates
+                    Geographic Coordinates (WGS84)
                   </span>
-                  <span className="info-val font-mono text-xs text-slate-700">
-                    {lead.lat.toFixed(6)}, {lead.lon.toFixed(6)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="info-val font-mono text-xs text-indigo-300">
+                      {lead.lat.toFixed(6)}, {lead.lon.toFixed(6)}
+                    </span>
+                    <button
+                      type="button"
+                      className="copy-btn-inline"
+                      onClick={() => handleCopy(`${lead.lat?.toFixed(6)}, ${lead.lon?.toFixed(6)}`, 'coords')}
+                      title="Copy coordinates"
+                    >
+                      {copiedField === 'coords' ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -171,7 +188,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
           <div className="modal-section">
             <h4 className="modal-section-title">
               <Layers className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
-              Documented OSM Tags
+              Documented OSM Key-Value Tags
             </h4>
             {Object.keys(lead.tags).length > 0 ? (
               <div className="tag-table-wrapper">
@@ -185,23 +202,23 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                   <tbody>
                     {Object.entries(lead.tags).map(([k, v]) => (
                       <tr key={k}>
-                        <td className="font-mono text-xs text-slate-600">{k}</td>
-                        <td className="text-xs text-slate-800">{v}</td>
+                        <td className="font-mono text-xs text-indigo-400">{k}</td>
+                        <td className="text-xs text-slate-300 font-mono">{v}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic">No additional tags recorded.</p>
+              <p className="text-xs text-slate-500 italic">No additional tags recorded.</p>
             )}
           </div>
 
           {/* Legal / Non-affiliation notice */}
           <div className="modal-disclaimer">
-            <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <Info className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
             <span>
-              Data source: OpenStreetMap contributors (ODbL 1.0). This open dataset is not extracted from or affiliated with Google Maps.
+              Aveniq Data Scraper extracts public data from OpenStreetMap contributors under ODbL 1.0. This tool is not affiliated with or extracted from Google Maps.
             </span>
           </div>
         </div>
@@ -214,11 +231,11 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
             rel="noopener noreferrer"
             className="btn btn-secondary text-xs"
           >
-            Open in OpenStreetMap.org
+            <span>Open in OpenStreetMap.org</span>
             <ExternalLink className="w-3.5 h-3.5 ml-1 inline" />
           </a>
           <button type="button" className="btn btn-primary text-xs" onClick={onClose}>
-            Close
+            Close Inspector
           </button>
         </div>
       </div>

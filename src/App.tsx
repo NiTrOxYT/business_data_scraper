@@ -52,6 +52,7 @@ export const App: React.FC = () => {
   const [jobs, setJobs] = useState<SearchJob[]>([]);
   const [isJobsLoading, setIsJobsLoading] = useState<boolean>(false);
   const [isJobsModalOpen, setIsJobsModalOpen] = useState<boolean>(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -303,6 +304,8 @@ export const App: React.FC = () => {
           loadJobs();
           setIsJobsModalOpen(true);
         }}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
       {/* Main dashboard content */}
@@ -315,6 +318,7 @@ export const App: React.FC = () => {
             loadJobs();
             setIsJobsModalOpen(true);
           }}
+          onToggleMobileMenu={() => setIsMobileNavOpen((prev) => !prev)}
         />
 
         <SearchForm

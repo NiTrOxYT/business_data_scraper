@@ -34,6 +34,11 @@ export interface SearchDiagnostics {
   deduplicated_count: number;
   final_count: number;
   bounding_box: [number, number, number, number];
+  search_area_type?: string;
+  search_area_description?: string;
+  center_coordinates?: [number, number];
+  radius_km?: number | null;
+  resolved_location?: string;
 }
 
 export interface SearchResponse {
