@@ -1,7 +1,7 @@
 """
 Pydantic Schemas for Business Lead Finder API.
 """
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
 
@@ -30,6 +30,16 @@ class BusinessLead(BaseModel):
     tags: Dict[str, str] = Field(default_factory=dict, description="Raw relevant OSM tags")
 
 
+class SearchDiagnostics(BaseModel):
+    cache_hit: bool
+    data_source: str
+    upstream_count: int
+    parsed_count: int
+    deduplicated_count: int
+    final_count: int
+    bounding_box: List[float]
+
+
 class SearchResponse(BaseModel):
     location: str
     resolved_location: str
@@ -41,6 +51,7 @@ class SearchResponse(BaseModel):
     attribution: str = "Data © OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright)"
     notice: str = "OpenStreetMap is a community-driven map and not an exhaustive commercial directory. Business listings and contact information may be incomplete, unverified, or outdated."
     cached: bool = False
+    diagnostics: Optional[SearchDiagnostics] = None
 
 
 class HealthResponse(BaseModel):

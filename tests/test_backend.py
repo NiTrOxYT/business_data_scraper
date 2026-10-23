@@ -54,7 +54,8 @@ def test_invalid_category_validation():
 
 def test_overpass_query_builder():
     query = build_overpass_category_query("distributors", 22.5, 88.3, 22.6, 88.4, timeout=25, max_results=300)
-    assert "[out:json][timeout:25];" in query
+    assert "[out:json][timeout:25]" in query
+    assert "[bbox:22.500000,88.300000,22.600000,88.400000];" in query
     assert "shop" in query or "wholesale" in query
     assert "out center tags 300;" in query
 
@@ -382,3 +383,232 @@ def test_search_and_export_endpoints_mocked():
         assert export_resp.headers["content-type"].startswith("text/csv")
         assert "attachment; filename=" in export_resp.headers["content-disposition"]
         assert "Bengal Trading Corp" in export_resp.text
+
+
+# -------------------------------------------------------------------------
+# 10. Multi-Location & Multi-Category Comprehensive Retrieval Tests
+# -------------------------------------------------------------------------
+@pytest.mark.asyncio
+@pytest.mark.parametrize("location,bbox_coords", [
+    ("Kolkata", [22.45, 88.25, 22.65, 88.45]),
+    ("London", [51.40, -0.25, 51.60, 0.05]),
+    ("Austin", [30.15, -97.85, 30.45, -97.60]),
+])
+@pytest.mark.parametrize("category", ["distributors", "electronics"])
+async def test_multi_location_and_categories_not_truncated(location, bbox_coords, category):
+    """
+    Verifies that searches across 3 distinct locations and 2 categories:
+    1. Return multiple distinct businesses (not truncated to 1 or single-record).
+    2. Correctly parse and retain nodes, ways, and relations.
+    3. Retain valid businesses even when phone or website is unmapped.
+    4. Provide full diagnostics payloads with upstream, parsed, deduped, and final counts.
+    """
+    _GEOCODE_CACHE.clear()
+    _SEARCH_CACHE.clear()
+
+    mock_geocode = {
+        "display_name": f"{location} City Center",
+        "bounding_box": bbox_coords,
+        "place_id": 999,
+        "type": "city",
+    }
+
+    # Diverse collection of OSM elements: node with full details, node with NO phone/website, way, and relation
+    mock_elements = [
+        {
+            "type": "node",
+            "id": 101,
+            "lat": bbox_coords[0] + 0.01,
+            "lon": bbox_coords[1] + 0.01,
+            "tags": {
+                "name": f"{location} Primary {category.capitalize()}",
+                "phone": "+1 555-0101",
+                "website": "https://example.com/primary",
+                "addr:street": "Main Street",
+                "addr:city": location,
+            },
+        },
+        {
+            "type": "node",
+            "id": 102,
+            "lat": bbox_coords[0] + 0.02,
+            "lon": bbox_coords[1] + 0.02,
+            "tags": {
+                "name": f"{location} Unlisted Phone {category.capitalize()}",
+                # Phone and website omitted intentionally to verify record is NOT discarded
+                "addr:street": "Market Alley",
+                "addr:city": location,
+            },
+        },
+        {
+            "type": "way",
+            "id": 201,
+            "center": {
+                "lat": bbox_coords[0] + 0.03,
+                "lon": bbox_coords[1] + 0.03,
+            },
+            "tags": {
+                "name": f"{location} Center {category.capitalize()} Warehouse",
+                "phone": "+1 555-0202",
+                "addr:city": location,
+            },
+        },
+        {
+            "type": "relation",
+            "id": 301,
+            "center": {
+                "lat": bbox_coords[0] + 0.04,
+                "lon": bbox_coords[1] + 0.04,
+            },
+            "tags": {
+                "name": f"{location} Regional Complex",
+                "website": "https://complex.example.com",
+            },
+        },
+    ]
+
+    with patch("api.osm_service.geocode_location", new_callable=AsyncMock) as mock_geo:
+        mock_geo.return_value = mock_geocode
+        with patch("api.osm_service.execute_overpass_query", new_callable=AsyncMock) as mock_overpass:
+            mock_overpass.return_value = mock_elements
+
+            resp = await search_business_leads(location, category, limit=100, refresh=True)
+
+            # Verification 1: Multiple records returned (MUST NOT be 1 or truncated)
+            assert resp.total_found == 4, f"Expected 4 records for {location}-{category}, got {resp.total_found}"
+            assert len(resp.listings) == 4
+
+            # Verification 2: Check ID prefixes and deduplication keys
+            ids = [l.id for l in resp.listings]
+            assert ids == ["node/101", "node/102", "way/201", "relation/301"]
+
+            # Verification 3: Verify record without phone or website was kept
+            unlisted_lead = next(l for l in resp.listings if l.id == "node/102")
+            assert unlisted_lead.name == f"{location} Unlisted Phone {category.capitalize()}"
+            assert unlisted_lead.phone == ""
+            assert unlisted_lead.website == ""
+
+            # Verification 4: Diagnostics payload populated
+            diag = resp.diagnostics
+            assert diag is not None
+            assert diag.upstream_count == 4
+            assert diag.parsed_count == 4
+            assert diag.deduplicated_count == 4
+            assert diag.final_count == 4
+            assert diag.data_source == "overpass"
+            assert diag.cache_hit is False
+            assert diag.bounding_box == bbox_coords
+
+
+# -------------------------------------------------------------------------
+# 11. Caching & Cache Bypass (Refresh) Tests
+# -------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_caching_and_refresh_bypass():
+    """Verifies that cache keys include limit and that refresh=True forces a fresh query."""
+    _GEOCODE_CACHE.clear()
+    _SEARCH_CACHE.clear()
+
+    mock_geocode = {
+        "display_name": "Austin, Texas",
+        "bounding_box": [30.15, -97.85, 30.45, -97.60],
+        "place_id": 888,
+        "type": "city",
+    }
+    mock_elements = [
+        {"type": "node", "id": 1, "lat": 30.2, "lon": -97.7, "tags": {"name": "Biz 1"}},
+        {"type": "node", "id": 2, "lat": 30.3, "lon": -97.7, "tags": {"name": "Biz 2"}},
+    ]
+
+    with patch("api.osm_service.geocode_location", new_callable=AsyncMock) as mock_geo:
+        mock_geo.return_value = mock_geocode
+        with patch("api.osm_service.execute_overpass_query", new_callable=AsyncMock) as mock_overpass:
+            mock_overpass.return_value = mock_elements
+
+            # Request 1: Fresh search (cache miss)
+            res1 = await search_business_leads("Austin", "electronics", limit=50, refresh=False)
+            assert res1.cached is False
+            assert res1.diagnostics.cache_hit is False
+            assert mock_overpass.call_count == 1
+
+            # Request 2: Repeat with same params (cache hit)
+            res2 = await search_business_leads("Austin", "electronics", limit=50, refresh=False)
+            assert res2.cached is True
+            assert res2.diagnostics.cache_hit is True
+            # Overpass was NOT called again
+            assert mock_overpass.call_count == 1
+
+            # Request 3: Different limit (cache miss because cache key includes limit)
+            res3 = await search_business_leads("Austin", "electronics", limit=25, refresh=False)
+            assert res3.cached is False
+            assert mock_overpass.call_count == 2
+
+            # Request 4: Refresh flag passed (forces cache bypass)
+            res4 = await search_business_leads("Austin", "electronics", limit=50, refresh=True)
+            assert res4.cached is False
+            assert res4.diagnostics.cache_hit is False
+            # Overpass was called again because cache was bypassed
+            assert mock_overpass.call_count == 3
+
+
+# -------------------------------------------------------------------------
+# 12. Full FastAPI Search Endpoint Query Parameters Test
+# -------------------------------------------------------------------------
+def test_api_search_endpoint_with_refresh_and_limit():
+    """Verifies that the /api/search route receives and forwards limit and refresh params."""
+    with patch("api.index.search_business_leads", new_callable=AsyncMock) as mock_search:
+        mock_search.return_value = SearchResponse(
+            location="London",
+            resolved_location="London, Greater London, England",
+            category="distributors",
+            category_label="Distributors & Wholesalers",
+            bounding_box=[51.4, -0.2, 51.6, 0.0],
+            total_found=2,
+            listings=[
+                BusinessLead(
+                    id="node/10",
+                    name="London Wholesale Co",
+                    category="distributors",
+                    category_label="Distributors & Wholesalers",
+                    phone="",
+                    website="",
+                    address="",
+                    city="London",
+                    postcode="",
+                    lat=51.5,
+                    lon=-0.1,
+                    osm_type="node",
+                    osm_id=10,
+                    osm_url="https://www.openstreetmap.org/node/10",
+                ),
+                BusinessLead(
+                    id="node/11",
+                    name="Thames Trading Ltd",
+                    category="distributors",
+                    category_label="Distributors & Wholesalers",
+                    phone="+44 20 7946 0991",
+                    website="",
+                    address="",
+                    city="London",
+                    postcode="",
+                    lat=51.51,
+                    lon=-0.12,
+                    osm_type="node",
+                    osm_id=11,
+                    osm_url="https://www.openstreetmap.org/node/11",
+                ),
+            ],
+            cached=False,
+        )
+
+        resp = client.get("/api/search?location=London&category=distributors&limit=25&refresh=true")
+        assert resp.status_code == 200
+        mock_search.assert_called_once_with(
+            location="London",
+            category="distributors",
+            limit=25,
+            refresh=True,
+        )
+        data = resp.json()
+        assert data["total_found"] == 2
+        assert len(data["listings"]) == 2

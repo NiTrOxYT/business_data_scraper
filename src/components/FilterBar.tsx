@@ -1,6 +1,6 @@
 import React from 'react';
-import { Download, Phone, Globe, MapPin, ArrowUpDown, XCircle } from 'lucide-react';
-import { FilterState } from '../types';
+import { Download, Phone, Globe, MapPin, ArrowUpDown, XCircle, RotateCw, Database, Sparkles } from 'lucide-react';
+import { FilterState, SearchDiagnostics } from '../types';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -9,6 +9,10 @@ interface FilterBarProps {
   filteredCount: number;
   onExportCsv: () => void;
   isExporting: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  isCached?: boolean;
+  diagnostics?: SearchDiagnostics;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -18,6 +22,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   filteredCount,
   onExportCsv,
   isExporting,
+  onRefresh,
+  isRefreshing,
+  isCached,
+  diagnostics,
 }) => {
   const hasActiveFilters =
     filters.keyword !== '' ||
@@ -35,10 +43,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     });
   };
 
+  const dataSourceLabel =
+    diagnostics?.data_source === 'overpass'
+      ? 'Overpass API'
+      : diagnostics?.data_source === 'nominatim_bounded_poi'
+      ? 'OSM Bounded POI'
+      : 'OpenStreetMap';
+
   return (
     <div className="filter-card">
       <div className="filter-top-row">
-        {/* Summary Counter */}
+        {/* Summary Counter & Diagnostics Pill */}
         <div className="results-summary">
           <span className="summary-headline">
             Showing <strong>{filteredCount}</strong> of <strong>{totalListings}</strong> listings
@@ -48,10 +63,34 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               Filtered View
             </span>
           )}
+
+          {/* Diagnostics badges */}
+          <span className="source-pill" title={`Retrieved from ${dataSourceLabel}`}>
+            <Database className="w-3 h-3 inline mr-1 text-slate-500" />
+            {dataSourceLabel}
+          </span>
+
+          <span className={`cache-pill ${isCached ? 'cache-hit' : 'cache-fresh'}`} title={isCached ? 'Served from 15-minute in-memory cache' : 'Fresh query from OpenStreetMap upstream'}>
+            <Sparkles className="w-3 h-3 inline mr-1 text-blue-500" />
+            {isCached ? 'Cached' : 'Fresh'}
+          </span>
         </div>
 
-        {/* CSV Export Button for currently filtered view */}
+        {/* Action Buttons: Refresh & CSV Export */}
         <div className="export-action">
+          {onRefresh && (
+            <button
+              type="button"
+              className="btn btn-secondary filter-refresh-btn"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              title="Bypass cache and refresh records"
+            >
+              <RotateCw className={`w-3.5 h-3.5 mr-1 inline text-slate-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          )}
+
           <button
             type="button"
             className="btn btn-secondary export-btn"

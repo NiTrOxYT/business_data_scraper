@@ -1,6 +1,6 @@
 """
 Controlled Business Categories Registry for OpenStreetMap Queries.
-Maps business categories to documented OSM key-value tags.
+Maps business categories to documented OSM key-value tags and Overpass QL builders.
 """
 from typing import Dict, List, Any
 
@@ -10,123 +10,107 @@ CATEGORIES: Dict[str, Dict[str, Any]] = {
         "id": "distributors",
         "label": "Distributors & Wholesalers",
         "description": "Wholesale businesses, trade distributors, and bulk suppliers.",
-        "osm_tags": [
-            'node["shop"="wholesale"]',
-            'way["shop"="wholesale"]',
-            'node["office"="wholesale"]',
-            'way["office"="wholesale"]',
-            'node["wholesale"="yes"]',
-            'way["wholesale"="yes"]',
-            'node["trade"]',
-            'way["trade"]',
+        "nwr_selectors": [
+            'nwr["shop"="wholesale"]',
+            'nwr["office"="wholesale"]',
+            'nwr["wholesale"="yes"]',
+            'nwr["trade"="wholesale"]',
+            'nwr["trade"="building_supplies"]',
         ],
-        "display_tags": ["shop=wholesale", "office=wholesale", "wholesale=yes", "trade=*"],
-        "search_keywords": ["wholesale", "distributor", "trade supplier"],
+        "osm_tags": [("shop", "wholesale"), ("office", "wholesale"), ("wholesale", "yes"), ("trade", "wholesale")],
+        "display_tags": ["shop=wholesale", "office=wholesale", "wholesale=yes", "trade=wholesale"],
+        "search_keywords": ["wholesale", "distributor", "wholesaler", "bulk supplier"],
     },
     "marketing_advertising": {
         "id": "marketing_advertising",
         "label": "Marketing & Advertising Agencies",
         "description": "Advertising agencies, digital marketing, PR, and media consulting.",
-        "osm_tags": [
-            'node["office"="advertising"]',
-            'way["office"="advertising"]',
-            'node["office"="marketing"]',
-            'way["office"="marketing"]',
-            'node["office"="public_relations"]',
-            'way["office"="public_relations"]',
-            'node["office"="media"]',
-            'way["office"="media"]',
+        "nwr_selectors": [
+            'nwr["office"="advertising"]',
+            'nwr["office"="marketing"]',
+            'nwr["office"="public_relations"]',
+            'nwr["office"="media"]',
         ],
+        "osm_tags": [("office", "advertising"), ("office", "marketing"), ("office", "public_relations"), ("office", "media")],
         "display_tags": ["office=advertising", "office=marketing", "office=public_relations", "office=media"],
-        "search_keywords": ["advertising agency", "marketing agency", "public relations"],
+        "search_keywords": ["advertising agency", "marketing agency", "public relations", "digital marketing"],
     },
     "recruitment": {
         "id": "recruitment",
         "label": "Recruitment & Employment Agencies",
         "description": "Staffing agencies, executive search, and recruitment consultants.",
-        "osm_tags": [
-            'node["office"="employment_agency"]',
-            'way["office"="employment_agency"]',
-            'node["office"="recruiter"]',
-            'way["office"="recruiter"]',
+        "nwr_selectors": [
+            'nwr["office"="employment_agency"]',
+            'nwr["office"="recruiter"]',
         ],
+        "osm_tags": [("office", "employment_agency"), ("office", "recruiter")],
         "display_tags": ["office=employment_agency", "office=recruiter"],
-        "search_keywords": ["employment agency", "recruitment agency", "staffing"],
+        "search_keywords": ["recruitment agency", "employment agency", "staffing agency", "job agency"],
     },
     "accounting": {
         "id": "accounting",
         "label": "Accounting & Tax Firms",
         "description": "Chartered accountants, tax advisors, auditors, and bookkeeping services.",
-        "osm_tags": [
-            'node["office"="accountant"]',
-            'way["office"="accountant"]',
-            'node["office"="tax_advisor"]',
-            'way["office"="tax_advisor"]',
-            'node["office"="bookkeeper"]',
-            'way["office"="bookkeeper"]',
-            'node["office"="financial_advisor"]',
-            'way["office"="financial_advisor"]',
+        "nwr_selectors": [
+            'nwr["office"="accountant"]',
+            'nwr["office"="tax_advisor"]',
+            'nwr["office"="bookkeeper"]',
+            'nwr["office"="financial_advisor"]',
         ],
+        "osm_tags": [("office", "accountant"), ("office", "tax_advisor"), ("office", "bookkeeper"), ("office", "financial_advisor")],
         "display_tags": ["office=accountant", "office=tax_advisor", "office=bookkeeper", "office=financial_advisor"],
-        "search_keywords": ["accountant", "tax consultant", "chartered accountant", "bookkeeper"],
+        "search_keywords": ["accountant", "tax consultant", "chartered accountant", "accounting firm", "bookkeeper"],
     },
     "electronics": {
         "id": "electronics",
         "label": "Electronics Shops & Suppliers",
         "description": "Retailers and component suppliers for electronics and electrical equipment.",
-        "osm_tags": [
-            'node["shop"="electronics"]',
-            'way["shop"="electronics"]',
-            'node["shop"="electrical"]',
-            'way["shop"="electrical"]',
+        "nwr_selectors": [
+            'nwr["shop"="electronics"]',
+            'nwr["shop"="electrical"]',
         ],
+        "osm_tags": [("shop", "electronics"), ("shop", "electrical")],
         "display_tags": ["shop=electronics", "shop=electrical"],
-        "search_keywords": ["electronics shop", "electrical supplier", "electronics store"],
+        "search_keywords": ["electronics shop", "electrical supplier", "electronics store", "electrical supplies"],
     },
     "computers": {
         "id": "computers",
         "label": "Computer & IT Equipment Shops",
         "description": "Computer retailers, IT hardware vendors, and computer repair centers.",
-        "osm_tags": [
-            'node["shop"="computer"]',
-            'way["shop"="computer"]',
-            'node["shop"="computer_repair"]',
-            'way["shop"="computer_repair"]',
-            'node["office"="it"]',
-            'way["office"="it"]',
+        "nwr_selectors": [
+            'nwr["shop"="computer"]',
+            'nwr["shop"="computer_repair"]',
+            'nwr["office"="it"]',
         ],
+        "osm_tags": [("shop", "computer"), ("shop", "computer_repair"), ("office", "it")],
         "display_tags": ["shop=computer", "shop=computer_repair", "office=it"],
-        "search_keywords": ["computer shop", "computer repair", "hardware vendor"],
+        "search_keywords": ["computer shop", "computer repair", "it hardware", "it supplier"],
     },
     "logistics": {
         "id": "logistics",
         "label": "Logistics & Freight Services",
         "description": "Freight forwarding, cargo transport, and courier management offices.",
-        "osm_tags": [
-            'node["office"="logistics"]',
-            'way["office"="logistics"]',
-            'node["office"="freight"]',
-            'way["office"="freight"]',
-            'node["office"="courier"]',
-            'way["office"="courier"]',
+        "nwr_selectors": [
+            'nwr["office"="logistics"]',
+            'nwr["office"="freight"]',
+            'nwr["office"="courier"]',
         ],
+        "osm_tags": [("office", "logistics"), ("office", "freight"), ("office", "courier")],
         "display_tags": ["office=logistics", "office=freight", "office=courier"],
-        "search_keywords": ["logistics", "freight forwarding", "courier service"],
+        "search_keywords": ["logistics", "freight forwarding", "courier service", "cargo transport"],
     },
     "manufacturing": {
         "id": "manufacturing",
         "label": "Industrial & Manufacturing",
         "description": "Manufacturing workshops, industrial production facilities, and fabricators.",
-        "osm_tags": [
-            'node["landuse"="industrial"]',
-            'way["landuse"="industrial"]',
-            'node["man_made"="works"]',
-            'way["man_made"="works"]',
-            'node["craft"]',
-            'way["craft"]',
+        "nwr_selectors": [
+            'nwr["landuse"="industrial"]',
+            'nwr["man_made"="works"]',
+            'nwr["industrial"="factory"]',
         ],
-        "display_tags": ["landuse=industrial", "man_made=works", "craft=*"],
-        "search_keywords": ["industrial works", "manufacturing plant", "workshop"],
+        "osm_tags": [("landuse", "industrial"), ("man_made", "works"), ("industrial", "factory")],
+        "display_tags": ["landuse=industrial", "man_made=works", "industrial=factory"],
+        "search_keywords": ["manufacturer", "factory", "industrial works", "manufacturing workshop"],
     },
 }
 
@@ -148,20 +132,25 @@ def get_category_definition(category_id: str) -> Dict[str, Any]:
     return CATEGORIES[category_id]
 
 
-def build_overpass_category_query(category_id: str, south: float, west: float, north: float, east: float, timeout: int = 25, max_results: int = 300) -> str:
+def build_overpass_category_query(
+    category_id: str,
+    south: float,
+    west: float,
+    north: float,
+    east: float,
+    timeout: int = 15,
+    max_results: int = 300,
+) -> str:
     """
-    Constructs an Overpass QL query string with bounding box constraints.
-    Applies strict timeout and result limits.
+    Constructs an optimized Overpass QL query string with global bounding box constraints.
+    Uses nwr (nodes, ways, relations) to leverage spatial index efficiently.
     """
     cat = get_category_definition(category_id)
-    bbox_str = f"({south:.6f},{west:.6f},{north:.6f},{east:.6f})"
+    selectors = cat.get("nwr_selectors", [])
     
-    query_parts = []
-    for tag_selector in cat["osm_tags"]:
-        query_parts.append(f"  {tag_selector}{bbox_str};")
-        
-    clauses = "\n".join(query_parts)
-    overpass_query = f"""[out:json][timeout:{timeout}];
+    # Global bbox in settings block activates spatial index in Overpass parser
+    clauses = "\n".join(f"  {sel};" for sel in selectors)
+    overpass_query = f"""[out:json][timeout:{timeout}][bbox:{south:.6f},{west:.6f},{north:.6f},{east:.6f}];
 (
 {clauses}
 );

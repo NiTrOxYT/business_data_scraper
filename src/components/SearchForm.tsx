@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Loader2, MapPin, Tag, Compass } from 'lucide-react';
+import { Search, Loader2, MapPin, Tag, Compass, RotateCw } from 'lucide-react';
 import { CategoryItem } from '../types';
 
 interface SearchFormProps {
@@ -8,8 +8,10 @@ interface SearchFormProps {
   onCategoryChange: (catId: string) => void;
   location: string;
   onLocationChange: (loc: string) => void;
-  onSearch: (loc: string, catId: string) => void;
+  onSearch: (loc: string, catId: string, refresh?: boolean, limit?: number) => void;
   isLoading: boolean;
+  limit: number;
+  onLimitChange: (limit: number) => void;
 }
 
 const SAMPLE_LOCATIONS = ['Kolkata', 'Austin, TX', 'London', 'Berlin', 'Mumbai', 'Chicago'];
@@ -22,6 +24,8 @@ export const SearchForm: React.FC<SearchFormProps> = ({
   onLocationChange,
   onSearch,
   isLoading,
+  limit,
+  onLimitChange,
 }) => {
   const [validationError, setValidationError] = useState<string>('');
 
@@ -37,13 +41,23 @@ export const SearchForm: React.FC<SearchFormProps> = ({
       return;
     }
     setValidationError('');
-    onSearch(cleanLoc, selectedCategory);
+    onSearch(cleanLoc, selectedCategory, false, limit);
+  };
+
+  const handleRefreshClick = () => {
+    const cleanLoc = location.trim();
+    if (!cleanLoc) {
+      setValidationError('Please enter a location to refresh.');
+      return;
+    }
+    setValidationError('');
+    onSearch(cleanLoc, selectedCategory, true, limit);
   };
 
   const handleChipClick = (city: string) => {
     onLocationChange(city);
     setValidationError('');
-    onSearch(city, selectedCategory);
+    onSearch(city, selectedCategory, false, limit);
   };
 
   const currentCategoryDesc = categories.find((c) => c.id === selectedCategory)?.description;
@@ -103,27 +117,63 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             <p className="form-hint truncate">{currentCategoryDesc || 'Documented OSM tags queried'}</p>
           </div>
 
-          {/* Search Button */}
+          {/* Result Limit Selector */}
+          <div className="form-group limit-group">
+            <label htmlFor="search-limit" className="form-label">
+              Max Results
+            </label>
+            <div className="select-wrapper">
+              <select
+                id="search-limit"
+                value={limit}
+                onChange={(e) => onLimitChange(Number(e.target.value))}
+                disabled={isLoading}
+                className="form-select"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+            <p className="form-hint">Safe result limit</p>
+          </div>
+
+          {/* Search & Refresh Buttons */}
           <div className="form-action-group">
             <label className="form-label">&nbsp;</label>
-            <button
-              id="search-button"
-              type="submit"
-              disabled={isLoading}
-              className="btn btn-primary search-submit-btn"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                  Querying OSM...
-                </>
-              ) : (
-                <>
-                  <Search className="w-4 h-4 mr-2 inline" />
-                  Find Businesses
-                </>
-              )}
-            </button>
+            <div className="button-cluster">
+              <button
+                id="search-button"
+                type="submit"
+                disabled={isLoading}
+                className="btn btn-primary search-submit-btn"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                    Querying OSM...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2 inline" />
+                    Find Businesses
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                id="refresh-button"
+                onClick={handleRefreshClick}
+                disabled={isLoading}
+                className="btn btn-secondary refresh-btn"
+                title="Bypass cache and query fresh OpenStreetMap data"
+              >
+                <RotateCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span className="refresh-label">Refresh</span>
+              </button>
+            </div>
           </div>
         </div>
 

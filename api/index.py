@@ -1,6 +1,7 @@
 """
 Business Lead Finder - FastAPI Application Entrypoint.
 Compatible with local Uvicorn development, Vercel Serverless Functions, and Render.
+Supports limit parameter, refresh cache bypass, and comprehensive diagnostics.
 """
 from datetime import datetime, timezone
 from typing import List
@@ -20,7 +21,7 @@ from api.csv_exporter import generate_leads_csv
 app = FastAPI(
     title="Business Lead Finder API",
     description="Search OpenStreetMap business leads by category and location",
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
@@ -41,7 +42,7 @@ async def get_health():
     return HealthResponse(
         status="ok",
         service="Business Lead Finder API",
-        version="1.0.0",
+        version="1.1.0",
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -64,25 +65,39 @@ async def list_categories():
 async def search_leads(
     location: str = Query(..., description="City or area name (e.g. Kolkata, Dallas, London)"),
     category: str = Query(..., description="Business category ID (e.g. distributors, accounting)"),
+    limit: int = Query(default=100, ge=1, le=300, description="Maximum number of business leads to return"),
+    refresh: bool = Query(default=False, description="Set to true to bypass cache and query fresh data"),
 ):
     """
     Search OpenStreetMap for business leads matching category in the specified location.
-    Results are cached in memory for repeat queries.
+    Supports configurable result limits, refresh cache bypass, and diagnostics logging.
     """
-    return await search_business_leads(location=location, category=category)
+    return await search_business_leads(
+        location=location,
+        category=category,
+        limit=limit,
+        refresh=refresh,
+    )
 
 
 @app.get("/api/export")
 async def export_leads_csv(
     location: str = Query(..., description="City or area name"),
     category: str = Query(..., description="Business category ID"),
+    limit: int = Query(default=100, ge=1, le=300),
+    refresh: bool = Query(default=False),
 ):
     """
     Exports search results as a downloadable CSV.
     Uses cached search results if recently queried to prevent duplicate Overpass requests.
     Includes formula injection mitigation and UTF-8-sig encoding.
     """
-    search_result = await search_business_leads(location=location, category=category)
+    search_result = await search_business_leads(
+        location=location,
+        category=category,
+        limit=limit,
+        refresh=refresh,
+    )
     csv_bytes = generate_leads_csv(search_result.listings)
     
     clean_loc = "".join(c for c in location if c.isalnum() or c in ("-", "_")).lower()

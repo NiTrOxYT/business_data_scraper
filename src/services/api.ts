@@ -28,11 +28,21 @@ export async function fetchCategories(): Promise<CategoryItem[]> {
   return resp.json();
 }
 
-export async function searchLeads(location: string, category: string): Promise<SearchResponse> {
+export async function searchLeads(
+  location: string,
+  category: string,
+  refresh: boolean = false,
+  limit: number = 100
+): Promise<SearchResponse> {
   const params = new URLSearchParams({
     location: location.trim(),
     category: category.trim(),
+    limit: String(limit),
   });
+
+  if (refresh) {
+    params.set('refresh', 'true');
+  }
 
   const resp = await fetch(`${API_BASE_URL}/search?${params.toString()}`);
   if (!resp.ok) {

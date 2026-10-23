@@ -29,6 +29,7 @@ export const App: React.FC = () => {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('distributors');
   const [location, setLocation] = useState<string>('Kolkata');
+  const [limit, setLimit] = useState<number>(100);
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -69,12 +70,17 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Search handler
-  const handleSearch = async (locQuery: string, catQuery: string) => {
+  // Search handler supporting cache refresh bypass and result limits
+  const handleSearch = async (
+    locQuery: string,
+    catQuery: string,
+    refresh: boolean = false,
+    searchLimit: number = limit
+  ) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await searchLeads(locQuery, catQuery);
+      const response = await searchLeads(locQuery, catQuery, refresh, searchLimit);
       setSearchResponse(response);
       setHasSearched(true);
       // Reset filter keywords on new search but retain settings
@@ -180,7 +186,7 @@ export const App: React.FC = () => {
         onSelectCategory={(catId) => {
           setSelectedCategory(catId);
           if (hasSearched && location) {
-            handleSearch(location, catId);
+            handleSearch(location, catId, false, limit);
           }
         }}
         apiOnline={apiOnline}
@@ -201,6 +207,8 @@ export const App: React.FC = () => {
           onLocationChange={setLocation}
           onSearch={handleSearch}
           isLoading={isLoading}
+          limit={limit}
+          onLimitChange={setLimit}
         />
 
         {/* Filter Bar (visible when results exist) */}
@@ -212,6 +220,10 @@ export const App: React.FC = () => {
             filteredCount={filteredListings.length}
             onExportCsv={handleExportCsv}
             isExporting={isExporting}
+            onRefresh={() => handleSearch(location, selectedCategory, true, limit)}
+            isRefreshing={isLoading}
+            isCached={searchResponse?.cached}
+            diagnostics={searchResponse?.diagnostics}
           />
         )}
 

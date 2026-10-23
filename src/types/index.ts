@@ -23,6 +23,16 @@ export interface BusinessLead {
   tags: Record<string, string>;
 }
 
+export interface SearchDiagnostics {
+  cache_hit: boolean;
+  data_source: string;
+  upstream_count: number;
+  parsed_count: number;
+  deduplicated_count: number;
+  final_count: number;
+  bounding_box: [number, number, number, number];
+}
+
 export interface SearchResponse {
   location: string;
   resolved_location: string;
@@ -34,6 +44,7 @@ export interface SearchResponse {
   attribution: string;
   notice: string;
   cached: boolean;
+  diagnostics?: SearchDiagnostics;
 }
 
 export interface FilterState {

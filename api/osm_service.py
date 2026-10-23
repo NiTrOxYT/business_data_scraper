@@ -1,9 +1,11 @@
 """
 OpenStreetMap Integration Service: Nominatim Geocoding & Overpass API Querying.
 Complies with OpenStreetMap Nominatim and Overpass API Usage Policies.
-Implements resilient fallback across multiple Overpass mirrors and Nominatim POI indexing.
+Implements resilient dual-engine retrieval, spatial bounding box queries, deduplication,
+in-memory caching with refresh bypass, and comprehensive diagnostics logging.
 """
 import asyncio
+import logging
 import os
 import time
 from typing import Dict, List, Optional, Tuple, Any
@@ -16,7 +18,19 @@ from api.categories import (
     build_overpass_category_query,
     get_category_ids,
 )
-from api.models import BusinessLead, SearchResponse
+from api.models import BusinessLead, SearchResponse, SearchDiagnostics
+
+# Configure logger
+logger = logging.getLogger("business_lead_finder")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "[%(asctime)s] [%(levelname)s] [OSM_SERVICE] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # Configuration defaults
 DEFAULT_USER_AGENT = os.getenv(
@@ -96,7 +110,10 @@ async def geocode_location(location: str, client: Optional[httpx.AsyncClient] = 
     cache_key = location.lower().strip()
     if cache_key in _GEOCODE_CACHE:
         _, cached_data = _GEOCODE_CACHE[cache_key]
+        logger.info(f"Geocode cache hit for '{location}': bbox={cached_data['bounding_box']}")
         return cached_data
+
+    logger.info(f"Geocoding location via Nominatim: '{location}'")
 
     # Enforce Nominatim 1 req/sec policy using async lock
     async with _NOMINATIM_LOCK:
@@ -193,6 +210,9 @@ async def geocode_location(location: str, client: Optional[httpx.AsyncClient] = 
         "type": place.get("type", ""),
     }
 
+    logger.info(
+        f"Geocoded '{location}' -> '{result['display_name']}' bbox=[{south:.4f}, {west:.4f}, {north:.4f}, {east:.4f}]"
+    )
     _GEOCODE_CACHE[cache_key] = (time.time(), result)
     return result
 
@@ -250,8 +270,8 @@ def normalize_osm_element(
     element: Dict[str, Any], category_id: str, category_label: str
 ) -> Optional[BusinessLead]:
     """
-    Transforms raw Overpass element into normalized BusinessLead schema.
-    Returns None if invalid.
+    Transforms raw Overpass element (node, way, or relation) into normalized BusinessLead schema.
+    Never invents missing values; sets them to empty string.
     """
     elem_type = element.get("type")
     elem_id = element.get("id")
@@ -267,6 +287,7 @@ def normalize_osm_element(
         lat = element.get("lat")
         lon = element.get("lon")
     else:
+        # Ways and relations centered via 'out center'
         center = element.get("center")
         if isinstance(center, dict):
             lat = center.get("lat")
@@ -329,19 +350,16 @@ def normalize_nominatim_element(
 
     unique_id = f"{osm_type}/{osm_id}"
     name = (item.get("name") or "").strip()
-    
-    # Coordinates
+
     lat = float(item["lat"]) if item.get("lat") else None
     lon = float(item["lon"]) if item.get("lon") else None
 
-    # Merge extratags with address details
     extratags = item.get("extratags", {}) or {}
     addr_dict = item.get("address", {}) or {}
 
     phone = _extract_phone(extratags)
     website = _extract_website(extratags)
 
-    # Address construction
     parts = []
     house = addr_dict.get("house_number", "").strip()
     road = addr_dict.get("road", "").strip()
@@ -360,7 +378,6 @@ def normalize_nominatim_element(
 
     osm_url = f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
 
-    # Retain useful extratags
     tags = {k: str(v) for k, v in extratags.items()}
     if item.get("category"):
         tags["category"] = item["category"]
@@ -388,7 +405,7 @@ def normalize_nominatim_element(
 
 async def execute_overpass_query(query: str, client: Optional[httpx.AsyncClient] = None) -> List[Dict[str, Any]]:
     """
-    Executes Overpass QL query with timeout, rate limit handling, and fallback server.
+    Executes Overpass QL query across multiple mirror endpoints with timeout and rate limit handling.
     """
     should_close = False
     if client is None:
@@ -406,24 +423,27 @@ async def execute_overpass_query(query: str, client: Optional[httpx.AsyncClient]
     try:
         for endpoint in endpoints:
             try:
+                logger.info(f"Dispatching query to Overpass mirror: {endpoint}")
                 resp = await client.post(endpoint, data={"data": query}, headers=headers)
                 if resp.status_code == 429:
-                    last_error = "Overpass API rate limit exceeded."
+                    last_error = "Overpass API rate limit reached (HTTP 429)."
                     continue
                 if resp.status_code == 504:
-                    last_error = "Overpass API gateway timed out."
+                    last_error = "Overpass API gateway timed out (HTTP 504)."
                     continue
                 if resp.status_code >= 400:
                     last_error = f"Overpass API returned status {resp.status_code}."
                     continue
 
                 data = resp.json()
-                return data.get("elements", [])
+                elements = data.get("elements", [])
+                logger.info(f"Overpass mirror {endpoint} returned {len(elements)} elements.")
+                return elements
             except (httpx.TimeoutException, httpx.RequestError) as e:
-                last_error = str(e)
+                last_error = f"{type(e).__name__}: {str(e)}"
+                logger.warning(f"Mirror {endpoint} failed: {last_error}")
                 continue
 
-        # If all Overpass mirrors fail or timeout
         raise HTTPException(
             status_code=503,
             detail=f"OpenStreetMap Overpass servers are currently overloaded ({last_error}).",
@@ -433,16 +453,24 @@ async def execute_overpass_query(query: str, client: Optional[httpx.AsyncClient]
             await client.aclose()
 
 
-async def query_osm_via_nominatim(
-    location: str, category_id: str, client: Optional[httpx.AsyncClient] = None
-) -> List[BusinessLead]:
+async def query_osm_via_bounded_nominatim(
+    location: str,
+    category_id: str,
+    bbox: List[float],
+    limit: int = 100,
+    client: Optional[httpx.AsyncClient] = None,
+) -> Tuple[List[BusinessLead], int]:
     """
     Resilient fallback engine: Queries OpenStreetMap entities directly via Nominatim
-    with extratags=1 to retrieve authentic verified mapped business leads.
+    bounded by the geocoded city's viewbox (west,north,east,south) with extratags=1.
+    Retrieves multiple authentic, verified mapped business entities.
     """
     global _LAST_NOMINATIM_REQUEST_TIME
     cat_def = get_category_definition(category_id)
     keywords = cat_def.get("search_keywords", [category_id])
+
+    south, west, north, east = bbox[0], bbox[1], bbox[2], bbox[3]
+    viewbox_str = f"{west:.6f},{north:.6f},{east:.6f},{south:.6f}"
 
     headers = {
         "User-Agent": DEFAULT_USER_AGENT,
@@ -452,6 +480,7 @@ async def query_osm_via_nominatim(
 
     leads: List[BusinessLead] = []
     seen_ids = set()
+    total_raw_elements = 0
 
     should_close = False
     if client is None:
@@ -459,8 +488,8 @@ async def query_osm_via_nominatim(
         should_close = True
 
     try:
-        # Search the top keywords
-        for kw in keywords[:2]:
+        # Search relevant category keywords within bounded city viewbox
+        for kw in keywords[:3]:
             async with _NOMINATIM_LOCK:
                 now = time.time()
                 elapsed = now - _LAST_NOMINATIM_REQUEST_TIME
@@ -469,70 +498,125 @@ async def query_osm_via_nominatim(
                 _LAST_NOMINATIM_REQUEST_TIME = time.time()
 
                 params = {
-                    "q": f"{kw} in {location}",
+                    "q": kw,
+                    "viewbox": viewbox_str,
+                    "bounded": "1",
                     "format": "jsonv2",
                     "extratags": "1",
                     "addressdetails": "1",
-                    "limit": "40",
+                    "limit": str(min(limit, 50)),
                 }
 
                 try:
+                    logger.info(f"Nominatim bounded POI search: q='{kw}' viewbox=[{viewbox_str}]")
                     resp = await client.get(f"{NOMINATIM_BASE_URL}/search", params=params, headers=headers)
                     if resp.status_code == 200:
                         items = resp.json()
+                        total_raw_elements += len(items)
                         for it in items:
                             lead = normalize_nominatim_element(it, category_id, cat_def["label"])
                             if lead and lead.id not in seen_ids:
                                 seen_ids.add(lead.id)
                                 leads.append(lead)
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.warning(f"Nominatim bounded POI query failed for '{kw}': {err}")
     finally:
         if should_close:
             await client.aclose()
 
-    return leads
+    return leads, total_raw_elements
 
 
 async def search_business_leads(
     location: str,
     category: str,
+    limit: int = 100,
+    refresh: bool = False,
     client: Optional[httpx.AsyncClient] = None,
 ) -> SearchResponse:
     """
-    Coordinates Nominatim geocoding and Overpass / Nominatim POI query retrieval.
-    Applies deduplication, normalization, and in-memory caching.
+    Coordinates Nominatim geocoding and Overpass / Bounded Nominatim POI retrieval.
+    Applies deduplication, normalization, result limit chunking, in-memory caching with refresh bypass,
+    and structured diagnostics logging.
     """
     _clean_cache()
     loc_clean = validate_location_input(location)
     cat_clean = validate_category_input(category)
     cat_def = get_category_definition(cat_clean)
+    safe_limit = max(1, min(limit, 300))
 
-    cache_key = f"{loc_clean.lower()}:{cat_clean}"
-    if cache_key in _SEARCH_CACHE:
+    cache_key = f"{loc_clean.lower()}:{cat_clean}:{safe_limit}"
+
+    # Cache check unless refresh requested
+    if not refresh and cache_key in _SEARCH_CACHE:
         _, cached_response = _SEARCH_CACHE[cache_key]
-        return cached_response.model_copy(update={"cached": True})
+        logger.info(f"Cache hit for key '{cache_key}'. Returning {cached_response.total_found} cached listings.")
+        cached_diag = (
+            cached_response.diagnostics.model_copy(update={"cache_hit": True})
+            if cached_response.diagnostics
+            else None
+        )
+        return cached_response.model_copy(update={"cached": True, "diagnostics": cached_diag})
 
-    # Step 1: Geocode location
+    if refresh:
+        logger.info(f"Bypassing cache on user request for '{loc_clean}' ({cat_clean}).")
+
+    # Step 1: Geocode location to bounding box
     geocode_info = await geocode_location(loc_clean, client=client)
     bbox = geocode_info["bounding_box"]
     south, west, north, east = bbox[0], bbox[1], bbox[2], bbox[3]
 
     leads: List[BusinessLead] = []
     seen_ids = set()
+    data_source = "overpass"
+    upstream_count = 0
 
-    # Step 2: Try Overpass query with fast timeout
+    # Step 2: Try Overpass query with optimized spatial index query
+    query = build_overpass_category_query(cat_clean, south, west, north, east, timeout=12, max_results=safe_limit)
+    logger.info(f"Generated Overpass QL query:\n{query}")
+
     try:
-        query = build_overpass_category_query(cat_clean, south, west, north, east, timeout=12, max_results=300)
         elements = await execute_overpass_query(query, client=client)
+        upstream_count = len(elements)
+        logger.info(f"Received {upstream_count} raw elements from Overpass.")
+
         for elem in elements:
             lead = normalize_osm_element(elem, cat_clean, cat_def["label"])
             if lead and lead.id not in seen_ids:
                 seen_ids.add(lead.id)
                 leads.append(lead)
-    except Exception:
-        # Fallback to authentic OpenStreetMap entities via Nominatim POI index
-        leads = await query_osm_via_nominatim(loc_clean, cat_clean, client=client)
+
+        data_source = "overpass"
+    except Exception as overpass_err:
+        logger.warning(f"Overpass query failed or timed out: {overpass_err}. Engaging bounded Nominatim POI engine.")
+        # Step 3: Fallback to bounded geographic POI search
+        leads, upstream_count = await query_osm_via_bounded_nominatim(
+            loc_clean, cat_clean, bbox=bbox, limit=safe_limit, client=client
+        )
+        data_source = "nominatim_bounded_poi"
+
+    parsed_count = len(leads)
+    deduplicated_count = len(seen_ids) if seen_ids else len(leads)
+
+    # Apply safe limit chunking
+    final_listings = leads[:safe_limit]
+    final_count = len(final_listings)
+
+    diagnostics = SearchDiagnostics(
+        cache_hit=False,
+        data_source=data_source,
+        upstream_count=upstream_count,
+        parsed_count=parsed_count,
+        deduplicated_count=deduplicated_count,
+        final_count=final_count,
+        bounding_box=bbox,
+    )
+
+    logger.info(
+        f"Search Complete: location='{loc_clean}' category='{cat_clean}' "
+        f"source='{data_source}' upstream={upstream_count} parsed={parsed_count} "
+        f"deduped={deduplicated_count} final={final_count}"
+    )
 
     response = SearchResponse(
         location=loc_clean,
@@ -540,9 +624,10 @@ async def search_business_leads(
         category=cat_clean,
         category_label=cat_def["label"],
         bounding_box=bbox,
-        total_found=len(leads),
-        listings=leads,
+        total_found=final_count,
+        listings=final_listings,
         cached=False,
+        diagnostics=diagnostics,
     )
 
     _SEARCH_CACHE[cache_key] = (time.time(), response)
