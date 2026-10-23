@@ -3,6 +3,7 @@ import {
   ExternalLink,
   Phone,
   Globe,
+  Mail,
   MapPin,
   ChevronLeft,
   ChevronRight,
@@ -11,11 +12,15 @@ import {
   Check,
   SearchX,
   Compass,
+  Database,
 } from 'lucide-react';
 import { BusinessLead } from '../types';
 
 interface LeadTableProps {
   leads: BusinessLead[];
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onSelectAll: (ids: string[]) => void;
   onSelectLead: (lead: BusinessLead) => void;
   isLoading: boolean;
   hasSearched: boolean;
@@ -25,6 +30,9 @@ interface LeadTableProps {
 
 export const LeadTable: React.FC<LeadTableProps> = ({
   leads,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
   onSelectLead,
   isLoading,
   hasSearched,
@@ -49,15 +57,29 @@ export const LeadTable: React.FC<LeadTableProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const paginatedIds = paginatedLeads.map((l) => l.id);
+  const isAllPaginatedSelected =
+    paginatedIds.length > 0 && paginatedIds.every((id) => selectedIds.has(id));
+
+  const handleSelectAllClick = () => {
+    if (isAllPaginatedSelected) {
+      // Deselect all on current page
+      onSelectAll(paginatedIds);
+    } else {
+      // Select all on current page
+      onSelectAll(paginatedIds);
+    }
+  };
+
   if (!hasSearched && !isLoading) {
     return (
       <div className="empty-state-card">
         <div className="empty-state-icon">
           <Compass className="w-10 h-10 text-blue-500" />
         </div>
-        <h3 className="empty-state-title">Ready to Prospect</h3>
+        <h3 className="empty-state-title">Ready to Scrape Business Data</h3>
         <p className="empty-state-desc">
-          Enter a city or metropolitan area above and select a business category to retrieve verified OpenStreetMap commercial listings.
+          Enter a location, choose a commercial category, add an optional custom keyword or radius, and extract authenticated OpenStreetMap business records.
         </p>
       </div>
     );
@@ -72,7 +94,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({
           </div>
           <h3 className="empty-state-title">No Listings Match Current Filters</h3>
           <p className="empty-state-desc">
-            Try loosening your keyword search, or toggle off the "Has Phone" / "Has Website" filter switches.
+            Try clearing your filter keyword or toggling off the "Has Phone", "Has Email", or "Has Website" checkboxes.
           </p>
           {onResetFilters && (
             <button
@@ -94,8 +116,8 @@ export const LeadTable: React.FC<LeadTableProps> = ({
         </div>
         <h3 className="empty-state-title">No Mapped Businesses Found</h3>
         <p className="empty-state-desc">
-          OpenStreetMap does not have mapped entities matching this category in the specified boundary.
-          Try searching for a larger neighboring city or a broader related category.
+          OpenStreetMap does not have mapped entities matching this category or keyword within this geographic boundary.
+          Try increasing the radius or searching a neighboring city.
         </p>
       </div>
     );
@@ -107,9 +129,19 @@ export const LeadTable: React.FC<LeadTableProps> = ({
         <table className="leads-table">
           <thead>
             <tr>
+              <th className="th-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isAllPaginatedSelected}
+                  onChange={handleSelectAllClick}
+                  className="row-checkbox"
+                  title="Select all on this page"
+                />
+              </th>
               <th className="th-name">Business Name</th>
               <th className="th-category">Category</th>
               <th className="th-contact">Phone</th>
+              <th className="th-email">Email</th>
               <th className="th-web">Website</th>
               <th className="th-address">Location & Address</th>
               <th className="th-actions">Actions</th>
@@ -117,17 +149,36 @@ export const LeadTable: React.FC<LeadTableProps> = ({
           </thead>
           <tbody>
             {paginatedLeads.map((lead) => {
+              const isSelected = selectedIds.has(lead.id);
               const displayName = lead.name || (
                 <span className="text-slate-400 italic">Unnamed entity</span>
               );
 
               return (
-                <tr key={lead.id} className="table-row">
+                <tr key={lead.id} className={`table-row ${isSelected ? 'row-selected' : ''}`}>
+                  {/* Selection Checkbox */}
+                  <td className="td-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(lead.id)}
+                      className="row-checkbox"
+                    />
+                  </td>
+
                   {/* Business Name */}
                   <td className="td-name">
                     <div className="lead-name-cell">
                       <span className="lead-title">{displayName}</span>
-                      <span className="lead-osm-id">{lead.id}</span>
+                      <div className="lead-meta-row">
+                        <span className="lead-osm-id">{lead.id}</span>
+                        {lead.data_source && (
+                          <span className="table-source-tag" title={lead.data_source}>
+                            <Database className="w-2.5 h-2.5 inline mr-0.5 text-slate-400" />
+                            {lead.data_source.includes('Overpass') ? 'Overpass' : 'Bounded POI'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
 
@@ -168,6 +219,36 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                     )}
                   </td>
 
+                  {/* Email */}
+                  <td className="td-email">
+                    {lead.email ? (
+                      <div className="contact-pill-wrapper">
+                        <a
+                          href={`mailto:${lead.email}`}
+                          className="contact-pill email-pill"
+                          title={lead.email}
+                        >
+                          <Mail className="w-3.5 h-3.5 text-emerald-600 mr-1" />
+                          <span className="truncate max-w-[130px]">{lead.email}</span>
+                        </a>
+                        <button
+                          type="button"
+                          className="copy-btn"
+                          onClick={() => handleCopy(lead.email, `email-${lead.id}`)}
+                          title="Copy email"
+                        >
+                          {copiedId === `email-${lead.id}` ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="missing-pill">Not mapped</span>
+                    )}
+                  </td>
+
                   {/* Website */}
                   <td className="td-web">
                     {lead.website ? (
@@ -180,7 +261,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                           title={lead.website}
                         >
                           <Globe className="w-3.5 h-3.5 text-indigo-600 mr-1" />
-                          <span className="truncate max-w-[140px]">
+                          <span className="truncate max-w-[130px]">
                             {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
                           </span>
                           <ExternalLink className="w-3 h-3 text-slate-400 ml-1 inline" />
@@ -217,7 +298,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                         type="button"
                         className="action-icon-btn"
                         onClick={() => onSelectLead(lead)}
-                        title="View Full OSM Details"
+                        title="View Full OSM Entity Details"
                       >
                         <Eye className="w-4 h-4 text-slate-600 hover:text-blue-600" />
                       </button>
@@ -244,6 +325,11 @@ export const LeadTable: React.FC<LeadTableProps> = ({
         <div className="pagination-info">
           Showing <strong>{startIndex + 1}</strong> to <strong>{endIndex}</strong> of{' '}
           <strong>{totalItems}</strong> entries
+          {selectedIds.size > 0 && (
+            <span className="selected-count-badge ml-3">
+              ({selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected)
+            </span>
+          )}
         </div>
 
         <div className="pagination-controls">

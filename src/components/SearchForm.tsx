@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Loader2, MapPin, Tag, Compass, RotateCw } from 'lucide-react';
+import { Search, Loader2, MapPin, Tag, Compass, RotateCw, Filter, Navigation } from 'lucide-react';
 import { CategoryItem } from '../types';
 
 interface SearchFormProps {
@@ -8,10 +8,21 @@ interface SearchFormProps {
   onCategoryChange: (catId: string) => void;
   location: string;
   onLocationChange: (loc: string) => void;
-  onSearch: (loc: string, catId: string, refresh?: boolean, limit?: number) => void;
-  isLoading: boolean;
+  keyword: string;
+  onKeywordChange: (kw: string) => void;
+  radiusKm: number | undefined;
+  onRadiusChange: (r: number | undefined) => void;
   limit: number;
   onLimitChange: (limit: number) => void;
+  onSearch: (
+    loc: string,
+    catId: string,
+    kw?: string,
+    radius?: number,
+    refresh?: boolean,
+    limit?: number
+  ) => void;
+  isLoading: boolean;
 }
 
 const SAMPLE_LOCATIONS = ['Kolkata', 'Austin, TX', 'London', 'Berlin', 'Mumbai', 'Chicago'];
@@ -22,10 +33,14 @@ export const SearchForm: React.FC<SearchFormProps> = ({
   onCategoryChange,
   location,
   onLocationChange,
-  onSearch,
-  isLoading,
+  keyword,
+  onKeywordChange,
+  radiusKm,
+  onRadiusChange,
   limit,
   onLimitChange,
+  onSearch,
+  isLoading,
 }) => {
   const [validationError, setValidationError] = useState<string>('');
 
@@ -41,7 +56,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
       return;
     }
     setValidationError('');
-    onSearch(cleanLoc, selectedCategory, false, limit);
+    onSearch(cleanLoc, selectedCategory, keyword, radiusKm, false, limit);
   };
 
   const handleRefreshClick = () => {
@@ -51,13 +66,13 @@ export const SearchForm: React.FC<SearchFormProps> = ({
       return;
     }
     setValidationError('');
-    onSearch(cleanLoc, selectedCategory, true, limit);
+    onSearch(cleanLoc, selectedCategory, keyword, radiusKm, true, limit);
   };
 
   const handleChipClick = (city: string) => {
     onLocationChange(city);
     setValidationError('');
-    onSearch(city, selectedCategory, false, limit);
+    onSearch(city, selectedCategory, keyword, radiusKm, false, limit);
   };
 
   const currentCategoryDesc = categories.find((c) => c.id === selectedCategory)?.description;
@@ -65,7 +80,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
   return (
     <section className="search-card">
       <form onSubmit={handleSubmit} className="search-form">
-        <div className="search-grid">
+        <div className="search-grid-expanded">
           {/* Location input */}
           <div className="form-group">
             <label htmlFor="search-location" className="form-label">
@@ -89,7 +104,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             {validationError ? (
               <p className="form-error">{validationError}</p>
             ) : (
-              <p className="form-hint">Enter a specific city, town, or municipality.</p>
+              <p className="form-hint">City, metropolitan area, or district</p>
             )}
           </div>
 
@@ -117,6 +132,53 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             <p className="form-hint truncate">{currentCategoryDesc || 'Documented OSM tags queried'}</p>
           </div>
 
+          {/* Custom Keyword Input */}
+          <div className="form-group">
+            <label htmlFor="search-keyword" className="form-label">
+              <Filter className="w-4 h-4 text-slate-500 inline mr-1" />
+              Custom Keyword (Optional)
+            </label>
+            <div className="input-wrapper">
+              <input
+                id="search-keyword"
+                type="text"
+                placeholder="e.g. audio, bakery, solar..."
+                value={keyword}
+                onChange={(e) => onKeywordChange(e.target.value)}
+                disabled={isLoading}
+                className="form-input"
+              />
+            </div>
+            <p className="form-hint">Filters or searches specific trade name</p>
+          </div>
+
+          {/* Search Radius / Area */}
+          <div className="form-group">
+            <label htmlFor="search-radius" className="form-label">
+              <Navigation className="w-4 h-4 text-slate-500 inline mr-1" />
+              Search Radius
+            </label>
+            <div className="select-wrapper">
+              <select
+                id="search-radius"
+                value={radiusKm === undefined ? 'auto' : String(radiusKm)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onRadiusChange(val === 'auto' ? undefined : Number(val));
+                }}
+                disabled={isLoading}
+                className="form-select"
+              >
+                <option value="auto">City Boundary (Admin)</option>
+                <option value="5">5 km radius</option>
+                <option value="10">10 km radius</option>
+                <option value="25">25 km radius</option>
+                <option value="50">50 km radius</option>
+              </select>
+            </div>
+            <p className="form-hint">Spatial bounding perimeter</p>
+          </div>
+
           {/* Result Limit Selector */}
           <div className="form-group limit-group">
             <label htmlFor="search-limit" className="form-label">
@@ -134,9 +196,10 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                 <option value={50}>50</option>
                 <option value={100}>100</option>
                 <option value={200}>200</option>
+                <option value={300}>300</option>
               </select>
             </div>
-            <p className="form-hint">Safe result limit</p>
+            <p className="form-hint">Chunk limit</p>
           </div>
 
           {/* Search & Refresh Buttons */}
@@ -152,12 +215,12 @@ export const SearchForm: React.FC<SearchFormProps> = ({
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                    Querying OSM...
+                    Scraping OSM...
                   </>
                 ) : (
                   <>
                     <Search className="w-4 h-4 mr-2 inline" />
-                    Find Businesses
+                    Scrape Leads
                   </>
                 )}
               </button>

@@ -12,6 +12,7 @@ export interface BusinessLead {
   category_label: string;
   phone: string;
   website: string;
+  email: string;
   address: string;
   city: string;
   postcode: string;
@@ -20,6 +21,8 @@ export interface BusinessLead {
   osm_type: string;
   osm_id: number;
   osm_url: string;
+  data_source: string;
+  search_timestamp: string;
   tags: Record<string, string>;
 }
 
@@ -38,6 +41,8 @@ export interface SearchResponse {
   resolved_location: string;
   category: string;
   category_label: string;
+  keyword?: string | null;
+  radius_km?: number | null;
   bounding_box: [number, number, number, number];
   total_found: number;
   listings: BusinessLead[];
@@ -47,10 +52,30 @@ export interface SearchResponse {
   diagnostics?: SearchDiagnostics;
 }
 
+export interface SearchJob {
+  id: string;
+  status: 'running' | 'completed' | 'failed';
+  location: string;
+  category: string;
+  category_label: string;
+  keyword?: string | null;
+  radius_km?: number | null;
+  limit: number;
+  started_at: string;
+  completed_at?: string | null;
+  duration_seconds?: number | null;
+  records_found: number;
+  duplicates_removed: number;
+  data_source: string;
+  cached: boolean;
+  error?: string | null;
+}
+
 export interface FilterState {
   keyword: string;
   phoneOnly: boolean;
   websiteOnly: boolean;
+  emailOnly: boolean;
   addressOnly: boolean;
   sortBy: 'name' | 'city' | 'phone' | 'website';
   sortOrder: 'asc' | 'desc';

@@ -1,12 +1,16 @@
 """
 OpenStreetMap Integration Service: Nominatim Geocoding & Overpass API Querying.
 Complies with OpenStreetMap Nominatim and Overpass API Usage Policies.
-Implements resilient dual-engine retrieval, spatial bounding box queries, deduplication,
+Implements resilient dual-engine retrieval, spatial radius queries, custom keyword search,
+email and phone normalization, deduplication, Apify-style job tracking,
 in-memory caching with refresh bypass, and comprehensive diagnostics logging.
 """
 import asyncio
+from datetime import datetime, timezone
 import logging
+import math
 import os
+import re
 import time
 from typing import Dict, List, Optional, Tuple, Any
 import httpx
@@ -19,6 +23,7 @@ from api.categories import (
     get_category_ids,
 )
 from api.models import BusinessLead, SearchResponse, SearchDiagnostics
+from api.job_service import start_search_job, complete_search_job, fail_search_job
 
 # Configure logger
 logger = logging.getLogger("business_lead_finder")
@@ -35,7 +40,7 @@ logger.setLevel(logging.INFO)
 # Configuration defaults
 DEFAULT_USER_AGENT = os.getenv(
     "OSM_USER_AGENT",
-    "BusinessLeadFinder/1.0 (contact: business.leadfinder.app@gmail.com)",
+    "BusinessLeadFinder/1.1 (contact: business.leadfinder.app@gmail.com)",
 )
 NOMINATIM_BASE_URL = os.getenv("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org")
 OVERPASS_API_URL = os.getenv("OVERPASS_API_URL", "https://overpass-api.de/api/interpreter")
@@ -59,50 +64,57 @@ _LAST_NOMINATIM_REQUEST_TIME = 0.0
 def _clean_cache():
     """Remove expired entries from memory caches."""
     now = time.time()
-    for cache in (_GEOCODE_CACHE, _SEARCH_CACHE):
-        expired = [k for k, (ts, _) in cache.items() if now - ts > CACHE_TTL_SECONDS]
-        for k in expired:
-            cache.pop(k, None)
+    expired_geo = [k for k, (ts, _) in _GEOCODE_CACHE.items() if now - ts > CACHE_TTL_SECONDS]
+    for k in expired_geo:
+        del _GEOCODE_CACHE[k]
+
+    expired_search = [k for k, (ts, _) in _SEARCH_CACHE.items() if now - ts > CACHE_TTL_SECONDS]
+    for k in expired_search:
+        del _SEARCH_CACHE[k]
 
 
 def validate_location_input(location: str) -> str:
-    """Validate user entered location string."""
-    loc = location.strip()
-    if not loc:
+    """Validate and sanitize user location input."""
+    if not location or not location.strip():
         raise HTTPException(
             status_code=400,
-            detail="Location is required. Please specify a city, town, or district (e.g., 'Kolkata', 'Austin, TX').",
+            detail="Location cannot be empty. Please enter a city or municipality name.",
         )
-    if len(loc) < 2:
+    clean = location.strip()
+    if len(clean) < 2:
         raise HTTPException(
             status_code=400,
-            detail="Location must be at least 2 characters long.",
+            detail="Location name must be at least 2 characters long.",
         )
-    if len(loc) > 100:
+    if len(clean) > 100:
         raise HTTPException(
             status_code=400,
-            detail="Location name is too long (maximum 100 characters).",
+            detail="Location query exceeds maximum allowed length of 100 characters.",
         )
-    return loc
+    # Check for basic SQL/script injection characters
+    if any(c in clean for c in [";", "--", "/*", "*/", "<", ">"]):
+        raise HTTPException(
+            status_code=400,
+            detail="Location contains invalid characters.",
+        )
+    return clean
 
 
 def validate_category_input(category: str) -> str:
-    """Validate user selected category."""
-    cat = category.strip().lower()
-    if not is_valid_category(cat):
-        valid_cats = ", ".join(get_category_ids())
+    """Validate that category exists in registered categories."""
+    if not is_valid_category(category):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Supported categories: {valid_cats}",
+            detail=f"Category '{category}' is invalid. Supported categories: {', '.join(get_category_ids())}",
         )
-    return cat
+    return category
 
 
 async def geocode_location(location: str, client: Optional[httpx.AsyncClient] = None) -> Dict[str, Any]:
     """
     Geocodes a location query using OpenStreetMap Nominatim.
     Throttles outbound calls to obey Nominatim usage policy (<= 1 req/sec).
-    Returns resolved place data with bounding box.
+    Returns resolved place data with bounding box, center lat, and center lon.
     """
     global _LAST_NOMINATIM_REQUEST_TIME
     _clean_cache()
@@ -201,9 +213,14 @@ async def geocode_location(location: str, client: Optional[httpx.AsyncClient] = 
             ),
         )
 
+    center_lat = float(place.get("lat", (south + north) / 2.0))
+    center_lon = float(place.get("lon", (west + east) / 2.0))
+
     result = {
         "display_name": place.get("display_name", location),
         "bounding_box": [south, west, north, east],
+        "lat": center_lat,
+        "lon": center_lon,
         "place_id": place.get("place_id"),
         "osm_id": place.get("osm_id"),
         "osm_type": place.get("osm_type"),
@@ -246,12 +263,23 @@ def _format_address(tags: Dict[str, str]) -> str:
     return ", ".join(parts)
 
 
+def _normalize_phone(raw_phone: str) -> str:
+    """
+    Normalizes phone numbers without changing their meaning or inventing digits.
+    Collapses multiple whitespaces and strips outer whitespace.
+    """
+    if not raw_phone:
+        return ""
+    clean = re.sub(r"\s+", " ", str(raw_phone)).strip()
+    return clean
+
+
 def _extract_phone(tags: Dict[str, str]) -> str:
     """Extract phone number if mapped, otherwise empty string."""
     for key in ("phone", "contact:phone", "telephone", "mobile", "contact:mobile"):
         val = tags.get(key, "").strip()
         if val:
-            return val
+            return _normalize_phone(val)
     return ""
 
 
@@ -266,8 +294,26 @@ def _extract_website(tags: Dict[str, str]) -> str:
     return ""
 
 
+def _extract_email(tags: Dict[str, str]) -> str:
+    """
+    Extracts business contact email only when explicitly present in permitted source.
+    Never fabricates or guesses email addresses.
+    """
+    for key in ("email", "contact:email"):
+        val = tags.get(key, "").strip()
+        if val and "@" in val and "." in val:
+            # Clean spaces
+            clean_email = re.sub(r"\s+", "", val)
+            return clean_email
+    return ""
+
+
 def normalize_osm_element(
-    element: Dict[str, Any], category_id: str, category_label: str
+    element: Dict[str, Any],
+    category_id: str,
+    category_label: str,
+    data_source: str = "OpenStreetMap (Overpass API)",
+    timestamp_str: str = "",
 ) -> Optional[BusinessLead]:
     """
     Transforms raw Overpass element (node, way, or relation) into normalized BusinessLead schema.
@@ -301,6 +347,7 @@ def normalize_osm_element(
 
     phone = _extract_phone(tags)
     website = _extract_website(tags)
+    email = _extract_email(tags)
     address = _format_address(tags)
     city = (
         tags.get("addr:city", "").strip()
@@ -313,7 +360,7 @@ def normalize_osm_element(
     relevant_keys = {
         "name", "brand", "operator", "shop", "office", "craft", "wholesale",
         "trade", "phone", "contact:phone", "website", "contact:website",
-        "opening_hours", "email", "addr:street", "addr:city", "addr:postcode"
+        "email", "contact:email", "opening_hours", "addr:street", "addr:city", "addr:postcode"
     }
     cleaned_tags = {k: v for k, v in tags.items() if k in relevant_keys}
 
@@ -324,6 +371,7 @@ def normalize_osm_element(
         category_label=category_label,
         phone=phone,
         website=website,
+        email=email,
         address=address,
         city=city,
         postcode=postcode,
@@ -332,12 +380,18 @@ def normalize_osm_element(
         osm_type=elem_type,
         osm_id=elem_id,
         osm_url=osm_url,
+        data_source=data_source,
+        search_timestamp=timestamp_str,
         tags=cleaned_tags,
     )
 
 
 def normalize_nominatim_element(
-    item: Dict[str, Any], category_id: str, category_label: str
+    item: Dict[str, Any],
+    category_id: str,
+    category_label: str,
+    data_source: str = "OpenStreetMap (Nominatim Bounded POI)",
+    timestamp_str: str = "",
 ) -> Optional[BusinessLead]:
     """
     Transforms OpenStreetMap entity retrieved via Nominatim into normalized BusinessLead schema.
@@ -359,6 +413,7 @@ def normalize_nominatim_element(
 
     phone = _extract_phone(extratags)
     website = _extract_website(extratags)
+    email = _extract_email(extratags)
 
     parts = []
     house = addr_dict.get("house_number", "").strip()
@@ -391,6 +446,7 @@ def normalize_nominatim_element(
         category_label=category_label,
         phone=phone,
         website=website,
+        email=email,
         address=formatted_address,
         city=city,
         postcode=postcode,
@@ -399,6 +455,8 @@ def normalize_nominatim_element(
         osm_type=osm_type,
         osm_id=osm_id,
         osm_url=osm_url,
+        data_source=data_source,
+        search_timestamp=timestamp_str,
         tags=tags,
     )
 
@@ -457,7 +515,9 @@ async def query_osm_via_bounded_nominatim(
     location: str,
     category_id: str,
     bbox: List[float],
+    keyword: Optional[str] = None,
     limit: int = 100,
+    timestamp_str: str = "",
     client: Optional[httpx.AsyncClient] = None,
 ) -> Tuple[List[BusinessLead], int]:
     """
@@ -467,7 +527,12 @@ async def query_osm_via_bounded_nominatim(
     """
     global _LAST_NOMINATIM_REQUEST_TIME
     cat_def = get_category_definition(category_id)
-    keywords = cat_def.get("search_keywords", [category_id])
+    keywords = list(cat_def.get("search_keywords", [category_id]))
+
+    clean_kw = keyword.strip() if keyword else ""
+    if clean_kw:
+        # Prioritize custom keyword
+        keywords.insert(0, clean_kw)
 
     south, west, north, east = bbox[0], bbox[1], bbox[2], bbox[3]
     viewbox_str = f"{west:.6f},{north:.6f},{east:.6f},{south:.6f}"
@@ -488,7 +553,7 @@ async def query_osm_via_bounded_nominatim(
         should_close = True
 
     try:
-        # Search relevant category keywords within bounded city viewbox
+        # Search relevant category keywords within bounded viewbox
         for kw in keywords[:3]:
             async with _NOMINATIM_LOCK:
                 now = time.time()
@@ -514,7 +579,13 @@ async def query_osm_via_bounded_nominatim(
                         items = resp.json()
                         total_raw_elements += len(items)
                         for it in items:
-                            lead = normalize_nominatim_element(it, category_id, cat_def["label"])
+                            lead = normalize_nominatim_element(
+                                it,
+                                category_id,
+                                cat_def["label"],
+                                data_source="OpenStreetMap (Nominatim Bounded POI)",
+                                timestamp_str=timestamp_str,
+                            )
                             if lead and lead.id not in seen_ids:
                                 seen_ids.add(lead.id)
                                 leads.append(lead)
@@ -530,22 +601,39 @@ async def query_osm_via_bounded_nominatim(
 async def search_business_leads(
     location: str,
     category: str,
+    keyword: Optional[str] = None,
+    radius_km: Optional[float] = None,
     limit: int = 100,
     refresh: bool = False,
     client: Optional[httpx.AsyncClient] = None,
 ) -> SearchResponse:
     """
     Coordinates Nominatim geocoding and Overpass / Bounded Nominatim POI retrieval.
-    Applies deduplication, normalization, result limit chunking, in-memory caching with refresh bypass,
+    Supports custom keyword search, optional radius calculation, Apify-style job tracking,
+    deduplication, normalization, result limit chunking, in-memory caching with refresh bypass,
     and structured diagnostics logging.
     """
     _clean_cache()
     loc_clean = validate_location_input(location)
     cat_clean = validate_category_input(category)
     cat_def = get_category_definition(cat_clean)
+    clean_kw = keyword.strip() if keyword else None
     safe_limit = max(1, min(limit, 300))
+    search_timestamp = datetime.now(timezone.utc).isoformat()
 
-    cache_key = f"{loc_clean.lower()}:{cat_clean}:{safe_limit}"
+    # Track search job
+    job = start_search_job(
+        location=loc_clean,
+        category=cat_clean,
+        category_label=cat_def["label"],
+        limit=safe_limit,
+        keyword=clean_kw,
+        radius_km=radius_km,
+    )
+
+    kw_part = f":{clean_kw.lower()}" if clean_kw else ""
+    rad_part = f":r{radius_km}" if radius_km else ""
+    cache_key = f"{loc_clean.lower()}:{cat_clean}{kw_part}{rad_part}:{safe_limit}"
 
     # Cache check unless refresh requested
     if not refresh and cache_key in _SEARCH_CACHE:
@@ -556,79 +644,145 @@ async def search_business_leads(
             if cached_response.diagnostics
             else None
         )
+        complete_search_job(
+            job_id=job.id,
+            records_found=cached_response.total_found,
+            duplicates_removed=0,
+            data_source=cached_response.diagnostics.data_source if cached_response.diagnostics else "OpenStreetMap",
+            cached=True,
+        )
         return cached_response.model_copy(update={"cached": True, "diagnostics": cached_diag})
 
     if refresh:
         logger.info(f"Bypassing cache on user request for '{loc_clean}' ({cat_clean}).")
 
-    # Step 1: Geocode location to bounding box
-    geocode_info = await geocode_location(loc_clean, client=client)
-    bbox = geocode_info["bounding_box"]
-    south, west, north, east = bbox[0], bbox[1], bbox[2], bbox[3]
-
-    leads: List[BusinessLead] = []
-    seen_ids = set()
-    data_source = "overpass"
-    upstream_count = 0
-
-    # Step 2: Try Overpass query with optimized spatial index query
-    query = build_overpass_category_query(cat_clean, south, west, north, east, timeout=12, max_results=safe_limit)
-    logger.info(f"Generated Overpass QL query:\n{query}")
-
     try:
-        elements = await execute_overpass_query(query, client=client)
-        upstream_count = len(elements)
-        logger.info(f"Received {upstream_count} raw elements from Overpass.")
+        # Step 1: Geocode location to coordinates / administrative bounding box
+        geocode_info = await geocode_location(loc_clean, client=client)
+        
+        # Calculate bounding box (Radius mode vs Administrative Boundary)
+        if radius_km and radius_km > 0:
+            center_lat = geocode_info.get("lat") or ((geocode_info["bounding_box"][0] + geocode_info["bounding_box"][2]) / 2.0)
+            center_lon = geocode_info.get("lon") or ((geocode_info["bounding_box"][1] + geocode_info["bounding_box"][3]) / 2.0)
+            
+            delta_lat = radius_km / 111.0
+            cos_lat = max(0.1, abs(math.cos(math.radians(center_lat))))
+            delta_lon = radius_km / (111.0 * cos_lat)
 
-        for elem in elements:
-            lead = normalize_osm_element(elem, cat_clean, cat_def["label"])
-            if lead and lead.id not in seen_ids:
-                seen_ids.add(lead.id)
-                leads.append(lead)
+            # Clamp span to MAX_BBOX_SPAN_DEGREES
+            delta_lat = min(delta_lat, MAX_BBOX_SPAN_DEGREES / 2.0)
+            delta_lon = min(delta_lon, MAX_BBOX_SPAN_DEGREES / 2.0)
 
-        data_source = "overpass"
-    except Exception as overpass_err:
-        logger.warning(f"Overpass query failed or timed out: {overpass_err}. Engaging bounded Nominatim POI engine.")
-        # Step 3: Fallback to bounded geographic POI search
-        leads, upstream_count = await query_osm_via_bounded_nominatim(
-            loc_clean, cat_clean, bbox=bbox, limit=safe_limit, client=client
+            south = center_lat - delta_lat
+            north = center_lat + delta_lat
+            west = center_lon - delta_lon
+            east = center_lon + delta_lon
+            bbox = [south, west, north, east]
+            logger.info(f"Calculated spatial radius bounding box for r={radius_km}km: bbox={bbox}")
+        else:
+            bbox = geocode_info["bounding_box"]
+            south, west, north, east = bbox[0], bbox[1], bbox[2], bbox[3]
+
+        leads: List[BusinessLead] = []
+        seen_ids = set()
+        data_source = "OpenStreetMap (Overpass API)"
+        upstream_count = 0
+
+        # Step 2: Try Overpass query with optimized spatial index query and optional keyword filter
+        query = build_overpass_category_query(
+            cat_clean,
+            south,
+            west,
+            north,
+            east,
+            keyword=clean_kw,
+            timeout=12,
+            max_results=safe_limit,
         )
-        data_source = "nominatim_bounded_poi"
+        logger.info(f"Generated Overpass QL query:\n{query}")
 
-    parsed_count = len(leads)
-    deduplicated_count = len(seen_ids) if seen_ids else len(leads)
+        try:
+            elements = await execute_overpass_query(query, client=client)
+            upstream_count = len(elements)
+            logger.info(f"Received {upstream_count} raw elements from Overpass.")
 
-    # Apply safe limit chunking
-    final_listings = leads[:safe_limit]
-    final_count = len(final_listings)
+            for elem in elements:
+                lead = normalize_osm_element(
+                    elem,
+                    cat_clean,
+                    cat_def["label"],
+                    data_source="OpenStreetMap (Overpass API)",
+                    timestamp_str=search_timestamp,
+                )
+                if lead and lead.id not in seen_ids:
+                    seen_ids.add(lead.id)
+                    leads.append(lead)
 
-    diagnostics = SearchDiagnostics(
-        cache_hit=False,
-        data_source=data_source,
-        upstream_count=upstream_count,
-        parsed_count=parsed_count,
-        deduplicated_count=deduplicated_count,
-        final_count=final_count,
-        bounding_box=bbox,
-    )
+            data_source = "OpenStreetMap (Overpass API)"
+        except Exception as overpass_err:
+            logger.warning(f"Overpass query failed or timed out: {overpass_err}. Engaging bounded Nominatim POI engine.")
+            # Step 3: Fallback to bounded geographic POI search
+            leads, upstream_count = await query_osm_via_bounded_nominatim(
+                loc_clean,
+                cat_clean,
+                bbox=bbox,
+                keyword=clean_kw,
+                limit=safe_limit,
+                timestamp_str=search_timestamp,
+                client=client,
+            )
+            data_source = "OpenStreetMap (Nominatim Bounded POI)"
 
-    logger.info(
-        f"Search Complete: location='{loc_clean}' category='{cat_clean}' "
-        f"source='{data_source}' upstream={upstream_count} parsed={parsed_count} "
-        f"deduped={deduplicated_count} final={final_count}"
-    )
+        parsed_count = len(leads)
+        deduplicated_count = len(seen_ids) if seen_ids else len(leads)
 
-    response = SearchResponse(
-        location=loc_clean,
-        resolved_location=geocode_info["display_name"],
-        category=cat_clean,
-        category_label=cat_def["label"],
-        bounding_box=bbox,
-        total_found=final_count,
-        listings=final_listings,
-        cached=False,
-        diagnostics=diagnostics,
-    )
+        # Apply safe limit chunking
+        final_listings = leads[:safe_limit]
+        final_count = len(final_listings)
+        duplicates_removed = max(0, upstream_count - final_count)
 
-    _SEARCH_CACHE[cache_key] = (time.time(), response)
-    return response
+        diagnostics = SearchDiagnostics(
+            cache_hit=False,
+            data_source=data_source,
+            upstream_count=upstream_count,
+            parsed_count=parsed_count,
+            deduplicated_count=deduplicated_count,
+            final_count=final_count,
+            bounding_box=bbox,
+        )
+
+        logger.info(
+            f"Search Complete: location='{loc_clean}' category='{cat_clean}' "
+            f"keyword='{clean_kw or ''}' radius={radius_km or 'auto'} "
+            f"source='{data_source}' upstream={upstream_count} parsed={parsed_count} "
+            f"deduped={deduplicated_count} final={final_count}"
+        )
+
+        response = SearchResponse(
+            location=loc_clean,
+            resolved_location=geocode_info["display_name"],
+            category=cat_clean,
+            category_label=cat_def["label"],
+            keyword=clean_kw,
+            radius_km=radius_km,
+            bounding_box=bbox,
+            total_found=final_count,
+            listings=final_listings,
+            cached=False,
+            diagnostics=diagnostics,
+        )
+
+        complete_search_job(
+            job_id=job.id,
+            records_found=final_count,
+            duplicates_removed=duplicates_removed,
+            data_source=data_source,
+            cached=False,
+        )
+
+        _SEARCH_CACHE[cache_key] = (time.time(), response)
+        return response
+
+    except Exception as exc:
+        fail_search_job(job_id=job.id, error_message=str(exc))
+        raise

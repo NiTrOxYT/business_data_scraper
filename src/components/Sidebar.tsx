@@ -1,5 +1,5 @@
 import React from 'react';
-import { Target, ShieldCheck, Layers } from 'lucide-react';
+import { Target, ShieldCheck, Layers, History } from 'lucide-react';
 import { CategoryItem } from '../types';
 
 interface SidebarProps {
@@ -7,6 +7,8 @@ interface SidebarProps {
   selectedCategory: string;
   onSelectCategory: (catId: string) => void;
   apiOnline: boolean;
+  jobCount?: number;
+  onOpenJobs?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -14,6 +16,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedCategory,
   onSelectCategory,
   apiOnline,
+  jobCount = 0,
+  onOpenJobs,
 }) => {
   return (
     <aside className="app-sidebar">
@@ -23,10 +27,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Target className="w-5 h-5 text-blue-600" />
         </div>
         <div>
-          <h1 className="brand-title">LeadFinder</h1>
-          <span className="brand-badge">OSM Edition</span>
+          <h1 className="brand-title">DataScraper</h1>
+          <span className="brand-badge">Open Source Edition</span>
         </div>
       </div>
+
+      {/* Scraper Jobs Quick Action */}
+      {onOpenJobs && (
+        <div className="sidebar-jobs-card">
+          <button
+            type="button"
+            className="sidebar-jobs-btn"
+            onClick={onOpenJobs}
+          >
+            <History className="w-4 h-4 text-blue-600" />
+            <span className="flex-1 text-left">Scraper Runs</span>
+            <span className="sidebar-jobs-badge">{jobCount}</span>
+          </button>
+        </div>
+      )}
 
       {/* Navigation / Categories */}
       <div className="sidebar-section">
@@ -58,10 +77,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="compliance-card">
           <div className="compliance-header">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="compliance-title">OSM Policy Ready</span>
+            <span className="compliance-title">Free & Compliant</span>
           </div>
           <p className="compliance-desc">
-            Queries Nominatim and Overpass respectfully with throttled rate-limiting.
+            Directly extracts OpenStreetMap ODbL data without Google Maps scraping or API billing.
           </p>
         </div>
 

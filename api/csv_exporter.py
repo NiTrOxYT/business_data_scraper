@@ -1,5 +1,6 @@
 """
 CSV Exporter with Formula Injection Mitigation and Unicode Support.
+Complies with OWASP CSV Injection guidelines and RFC 4180.
 """
 import csv
 import io
@@ -44,13 +45,16 @@ def generate_leads_csv(listings: List[BusinessLead]) -> bytes:
         "Category",
         "Phone",
         "Website",
+        "Email",
         "Full Address",
         "City",
         "Postal Code",
         "Latitude",
         "Longitude",
+        "Data Source",
         "OpenStreetMap Link",
         "OSM Object ID",
+        "Scraped Timestamp",
     ]
     writer.writerow(headers)
     
@@ -60,13 +64,16 @@ def generate_leads_csv(listings: List[BusinessLead]) -> bytes:
             sanitize_cell_value(lead.category_label or lead.category),
             sanitize_cell_value(lead.phone),
             sanitize_cell_value(lead.website),
+            sanitize_cell_value(lead.email),
             sanitize_cell_value(lead.address),
             sanitize_cell_value(lead.city),
             sanitize_cell_value(lead.postcode),
             str(lead.lat) if lead.lat is not None else "",
             str(lead.lon) if lead.lon is not None else "",
+            sanitize_cell_value(lead.data_source),
             sanitize_cell_value(lead.osm_url),
             sanitize_cell_value(lead.id),
+            sanitize_cell_value(lead.search_timestamp),
         ]
         writer.writerow(row)
         
