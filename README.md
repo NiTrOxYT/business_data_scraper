@@ -1,254 +1,234 @@
-# Business Lead Finder — OpenStreetMap B2B Prospecting Web Application
+# ◈ Aveniq Data Scraper
 
-A full-stack, production-minded MVP application designed for non-technical business owners to find prospective commercial clients for automation and B2B services by querying verified public OpenStreetMap (OSM) entities.
+### Open data. Smarter discovery. Zero paid API dependencies.
 
----
+**A free, open-data business discovery engine built for developers, entrepreneurs, and people who want to find business leads without expensive scraping subscriptions.**
 
-## 1. Business Objective
+Aveniq Data Scraper uses OpenStreetMap data to discover businesses by location and category, organize available business information, and turn search results into actionable datasets.
 
-This application enables automation and business consultancy owners to:
-- Discover commercial prospects across controlled categories (Distributors & Wholesalers, Marketing Agencies, Recruitment Agencies, Accounting Firms, Electronics Shops, Computer Suppliers, Logistics & Freight, Industrial & Manufacturing).
-- Search within specific cities, towns, or districts with geographic area limits to respect public infrastructure.
-- Filter and sort leads in real-time by keyword, mapped phone availability, website presence, and address.
-- Inspect raw OpenStreetMap tags, coordinates, and direct links to OpenStreetMap and Google Maps.
-- Export currently filtered prospect lists as formula-injection-safe, Unicode-preserving CSV files.
+[**Launch Web App ↗**](https://scraper-pi-one.vercel.app) · [**Report a Bug**](https://github.com/NiTrOxYT/business_data_scraper/issues) · [**Explore the Source**](https://github.com/NiTrOxYT/business_data_scraper)
 
 ---
 
-## 2. Architecture & Technology Stack
+## ◈ The idea
 
-| Layer | Technology | Details |
-|---|---|---|
-| **Frontend** | React 18, TypeScript, Vite | Single-page application, responsive SaaS dashboard |
-| **Styling** | Vanilla CSS Design System | Professional light theme, Navy typography (`#0f172a`), subtle blue accents (`#2563eb`) |
-| **Icons** | Lucide React | Clean, minimalist iconography |
-| **Backend API** | Python 3.11+, FastAPI | Asynchronous REST API, Pydantic data validation |
-| **Geocoding** | OSM Nominatim API | City/district geocoding with strict 1 req/sec rate throttling |
-| **Data Retrieval** | Dual-Engine: Overpass QL & Nominatim POI | Fast Overpass QL bounding box query with automatic fallback |
-| **Export Engine** | Custom Python CSV Exporter | OWASP formula injection protection & UTF-8-sig encoding |
-| **Testing** | Pytest, Pytest-Asyncio, Starlette TestClient | 100% deterministic tests with mocked external APIs |
-| **Deployment** | Vercel (Frontend & Serverless API) / Render fallback | Pre-configured `vercel.json` and CORS support |
+Business data tools can be expensive, restrictive, or difficult to customize. Aveniq Data Scraper takes a different approach: build your own workflow around open geographic data, transparent sources, and a developer-friendly stack.
 
----
+Search for businesses. Inspect available information. Export results. Build your own lead-generation workflow.
 
-## 3. Directory Structure
+**No paid API keys required for the core OpenStreetMap-based workflow. No mandatory scraping subscription. Just a tool you can run, inspect, and extend.**
 
-```
-business-lead-finder/
-├── api/
-│   ├── __init__.py
-│   ├── categories.py       # Controlled category registry & Overpass QL query builder
-│   ├── csv_exporter.py     # OWASP formula-injection-safe CSV generator
-│   ├── index.py            # FastAPI endpoints (health, categories, search, export)
-│   ├── models.py           # Pydantic request/response schemas
-│   ├── osm_service.py      # Nominatim geocoding & Overpass data pipeline
-│   └── requirements.txt    # Backend dependencies for Vercel Python runtime
-├── src/
-│   ├── components/
-│   │   ├── FilterBar.tsx   # Client filters (keyword, phone, website, sort, export)
-│   │   ├── Header.tsx      # Dashboard header & search context pill
-│   │   ├── LeadDetailsModal.tsx # Full OSM tag and coordinate inspector
-│   │   ├── LeadTable.tsx   # Sortable, paginated data table with copy actions
-│   │   ├── NoticeBanner.tsx # OpenStreetMap attribution & public data disclaimer
-│   │   ├── SearchForm.tsx  # Location, category selector, & quick chips
-│   │   └── Sidebar.tsx     # Navigation sidebar with status indicator
-│   ├── services/
-│   │   └── api.ts          # Frontend API service with environment base URL
-│   ├── types/
-│   │   └── index.ts        # TypeScript interfaces
-│   ├── App.css             # Light-theme SaaS design tokens and component styles
-│   ├── App.tsx             # Main dashboard orchestrator
-│   ├── main.tsx            # React DOM mounting
-│   └── vite-env.d.ts       # Vite client types
-├── tests/
-│   ├── __init__.py
-│   └── test_backend.py     # Comprehensive automated test suite
-├── index.html              # HTML5 entrypoint with SEO meta tags
-├── package.json            # Node.js dependencies & scripts
-├── requirements.txt        # Root Python dependencies for Render / local venv
-├── tsconfig.json           # TypeScript configuration
-├── vercel.json             # Vercel routing configuration
-└── README.md               # Complete documentation
+> Data availability depends on OpenStreetMap coverage and the information contributed by its community. This project does not scrape Google Maps.
+
+## ✦ Features
+
+| Feature | Description |
+|---|---|
+| 🌍 Location-based discovery | Search businesses by city or location |
+| 🧭 Category search | Discover businesses using supported category mappings |
+| 🔎 Open-data search | Uses OpenStreetMap-based search infrastructure |
+| 📋 Structured results | View available names, addresses, contact details, and coordinates |
+| 📤 Data export | Export functionality provided by the application |
+| ♻️ Duplicate handling | Deduplicate records using source identifiers |
+| ⚡ Cache-aware searches | Reuse cached results where appropriate and support refresh |
+| 🧪 Tested backend | Automated backend tests for search and data-processing behavior |
+| 🌑 Dark interface | A polished, dark dashboard with an engineering-focused visual identity |
+| 📱 Responsive design | Desktop dashboard and mobile navigation |
+| 🧾 Source transparency | Preserve data-source attribution and distinguish unavailable fields |
+
+*The availability of individual fields and features depends on the configured search category, source data, and deployed application version.*
+
+## 🖥️ Interface
+
+Aveniq uses a dark, data-engineering-inspired interface featuring:
+
+- Obsidian surfaces and subtle glass-like borders.
+- Electric indigo and cyan accents.
+- Plus Jakarta Sans typography.
+- JetBrains Mono for technical metadata.
+- Responsive navigation, search controls, and result tables.
+- Execution-run history UI and interactive data controls.
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TD
+    A[React + TypeScript Dashboard] --> B[FastAPI Backend]
+    B --> C[Search Service]
+    C --> D[Nominatim Geocoding]
+    C --> E[Overpass API]
+    E --> F[OpenStreetMap Data]
+    D --> C
+    C --> G[Normalize and Deduplicate]
+    G --> H[Structured Business Results]
+    H --> I[Dashboard and Export]
 ```
 
----
+### Technology stack
 
-## 4. Prerequisites
+- **Frontend:** React, TypeScript, Vite
+- **Backend:** Python, FastAPI
+- **Geographic data:** OpenStreetMap
+- **Geocoding:** Nominatim
+- **Geographic queries:** Overpass API
+- **Testing:** pytest
+- **Deployment:** Vercel for the deployed application
 
-- **Python**: Version 3.10 or higher (Python 3.11 recommended).
-- **Node.js**: Version 18 or higher (Node 20+ recommended).
-- **Git**: Installed and configured.
+## 🚀 Getting started
 
----
+### Requirements
 
-## 5. Local Development Setup
+- Node.js and npm
+- Python 3.11 or a compatible version supported by the project
+- Git
+- Internet access for the public OpenStreetMap services
 
-### Step 1: Clone and Prepare Environment
+### 1. Clone the repository
 
 ```bash
-# Clone the repository
 git clone https://github.com/NiTrOxYT/business_data_scraper.git
 cd business_data_scraper
 ```
 
-### Step 2: Set Up Python Backend
+### 2. Install frontend dependencies
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-# On Windows (PowerShell):
-.\.venv\Scripts\Activate.ps1
-# On Linux / macOS:
-source .venv/bin/activate
-
-# Install backend dependencies
-pip install -r requirements.txt
-
-# Start the FastAPI server
-uvicorn api.index:app --host 127.0.0.1 --port 8000 --reload
-```
-The backend API will be available at: `http://127.0.0.1:8000`
-- Interactive OpenAPI Docs: `http://127.0.0.1:8000/api/docs`
-- Health check: `http://127.0.0.1:8000/api/health`
-
-### Step 3: Set Up React Frontend
-
-In a separate terminal window:
-```bash
-# Install frontend packages
 npm install
+```
 
-# Start Vite development server
+### 3. Set up the Python environment
+
+**Windows PowerShell:**
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+**macOS / Linux:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install the backend dependencies using the dependency file included in the repository. For example, if the project uses `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+Check the repository's backend entry point and local development instructions before starting the server.
+
+### 4. Start the application
+
+Run the frontend:
+
+```bash
 npm run dev
 ```
-The frontend application will be running at: `http://127.0.0.1:5173/`
 
-Vite is preconfigured to proxy all `/api/*` requests to `http://127.0.0.1:8000` automatically during local development.
+Run the FastAPI backend using the actual module path configured in the project. For example:
 
----
-
-## 6. Running Tests
-
-Run the backend test suite:
 ```bash
-.\.venv\Scripts\python -m pytest tests/test_backend.py -v
+uvicorn api.index:app --reload --port 8000
 ```
-Test suite coverage includes:
-- Category identification and tag mappings.
-- Overpass QL query builder bounding box constraints.
-- Location query validation (empty strings, length constraints).
-- Area size limits (rejection of queries spanning > 2.0 degrees).
-- Business normalization and tag mapping.
-- Guarantee that unmapped phone numbers, websites, or addresses remain blank and are **never** fabricated.
-- Duplicate removal across nodes, ways, and relations.
-- Empty result handling and informative messaging.
-- Upstream network errors and rate limit responses.
-- OWASP spreadsheet formula injection mitigation (escaping `=`, `+`, `-`, `@`, `\t`, `\r`).
-- UTF-8 with BOM (`utf-8-sig`) multi-lingual Unicode character preservation.
-- FastAPI endpoint responses for `/api/health`, `/api/categories`, `/api/search`, and `/api/export`.
 
-Verify frontend TypeScript types and production build:
+If the frontend uses a Vite development proxy, confirm that it points to the backend port.
+
+### 5. Run tests and build
+
 ```bash
 npm run build
 ```
 
----
+For a Windows virtual environment:
 
-## 7. Environment Variables
-
-Create a `.env` file or configure these variables in your deployment dashboard:
-
-| Variable | Default Value | Description |
-|---|---|---|
-| `OSM_USER_AGENT` | `BusinessLeadFinder/1.0 (contact: business.leadfinder.app@gmail.com)` | Identification header sent to Nominatim and Overpass, required by usage policies. |
-| `NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` | Base URL for the OpenStreetMap Nominatim geocoding service. |
-| `OVERPASS_API_URL` | `https://overpass-api.de/api/interpreter` | Primary Overpass API interpreter URL. |
-| `FALLBACK_OVERPASS_API_URL` | `https://lz4.overpass-api.de/api/interpreter` | Secondary Overpass mirror for failover. |
-| `VITE_API_BASE_URL` | `""` (Empty defaults to same-origin `/api`) | If deploying the backend separately (e.g., on Render), set this to your backend domain (e.g., `https://api.businessleadfinder.com`). |
-
----
-
-## 8. Deployment Guide
-
-### Option 1: Vercel Full-Stack Deployment (Recommended)
-
-The repository includes a ready-to-use `vercel.json` configuration that builds the Vite frontend into `dist/` and routes `/api/*` to `api/index.py`:
-
-```json
-{
-  "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
+```powershell
+.\.venv\Scripts\python -m pytest tests/test_backend.py -v
 ```
 
-#### Steps to Deploy to Vercel:
-1. Push your code to GitHub.
-2. In the [Vercel Dashboard](https://vercel.com/new), click **Add New Project** and select your GitHub repository.
-3. Keep Framework Preset as **Vite**.
-4. Set Environment Variables:
-   - `OSM_USER_AGENT`: `BusinessLeadFinder/1.0 (contact: your-email@yourdomain.com)`
-5. Click **Deploy**. Vercel will install dependencies from both `package.json` and `api/requirements.txt` and launch the application.
+Adjust the test command if your repository uses a different test path.
 
----
+## 🔍 How it works
 
-### Option 2: Render Fallback (Separate Python API + Vercel Frontend)
+1. Enter a location and choose a supported business category.
+2. The backend resolves the location and prepares a geographic query.
+3. The search service retrieves matching open-data records.
+4. Results are normalized and duplicates are removed.
+5. The dashboard displays the returned business information.
+6. Use the available export controls to work with your results.
 
-If Vercel's serverless function execution timeout (10s on hobby accounts) limits complex Overpass queries in large cities, deploy the backend to Render:
+A missing phone number, website, or email does not necessarily mean a business record is invalid. The tool should preserve legitimate records and leave unavailable fields empty rather than inventing details.
 
-#### 1. Deploy API on Render:
-1. In the [Render Dashboard](https://dashboard.render.com/), create a **New Web Service**.
-2. Connect your GitHub repository.
-3. Configure the service:
-   - **Environment**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn api.index:app --host 0.0.0.0 --port $PORT`
-4. Under **Environment Variables**, set:
-   - `OSM_USER_AGENT`: `BusinessLeadFinder/1.0 (contact: your-email@yourdomain.com)`
-5. Deploy and copy your Render service URL (e.g. `https://lead-finder-api.onrender.com`).
+## 🌐 Live application
 
-#### 2. Connect Frontend on Vercel:
-1. In your Vercel project settings under **Environment Variables**, add:
-   - `VITE_API_BASE_URL`: `https://lead-finder-api.onrender.com`
-2. Redeploy the frontend. All client requests will now point directly to your dedicated Render backend.
+**Production:** https://scraper-pi-one.vercel.app
 
----
+The public website is deployed on Vercel. The frontend and backend may have different runtime limitations, and public data services may occasionally be unavailable or rate-limited.
 
-## 9. OpenStreetMap Attribution & Licensing
+## 🧪 Testing
 
-- **Attribution**: Map and business entity data is derived from OpenStreetMap contributors:
-  > *"Data © OpenStreetMap contributors, licensed under the Open Database License (ODbL 1.0)."*
-- **Terms**: This application accesses OpenStreetMap's public servers strictly following the published [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/) and [Overpass API Acceptable Use Policy](https://wiki.openstreetmap.org/wiki/Overpass_API):
-  - Outbound Nominatim requests are throttled to a minimum 1.1s interval (enforcing the $\le 1$ request/second rule).
-  - Geocoding and search queries are cached in memory for 15 minutes to eliminate duplicate requests.
-  - Queries are constrained by bounding boxes and maximum result thresholds (300 items).
+The latest reported project verification included:
 
----
+- **33 backend tests passed**
+- **Frontend production build succeeded**
+- **Git changes pushed to GitHub**
+- **Vercel deployment reported as ready**
+- **Mobile layout checked at a 390 × 844 viewport**
 
-## 10. Known Limitations & User Guidance
+These are results from the development session's verification report; they are not a guarantee that every external API or feature will remain operational.
 
-1. **Crowdsourced Directory**: OpenStreetMap is a volunteer-mapped geographic database, not an exhaustive commercial business registry like Google Places or yellow pages.
-2. **Contact Detail Availability**: Many small businesses may only have their name and location mapped, while phone numbers and websites may be missing or unverified.
-3. **Overpass Server Availability**: Free community Overpass servers can experience high load during peak hours. The application handles this transparently by using multiple mirrors and falling back to Nominatim's POI index when needed.
-4. **Geographic Scope**: Excessively broad searches (such as entire nations or continents) are intentionally rejected by the validation layer to protect public community servers. Always search by city, town, or metropolitan region.
+## ⚖️ Data sources and responsible use
 
----
+Aveniq Data Scraper is built around open geographic data, not Google Maps scraping.
 
-## 11. Security & Protection
+- OpenStreetMap data is available under the Open Data Commons Open Database License (ODbL), subject to its terms.
+- Provide appropriate attribution to OpenStreetMap contributors.
+- Follow the usage policies of public services such as Nominatim and Overpass.
+- Avoid aggressive requests, excessive concurrency, and attempts to bypass service limits.
+- Respect applicable privacy, marketing, and data-protection requirements when using business contact information.
+- Verify important business details before relying on them.
 
-- **OWASP CSV Formula Injection Protection**: All exported fields starting with formula characters (`=`, `+`, `-`, `@`, `\t`, `\r`) are automatically escaped with a leading single quote (`'`) to prevent arbitrary code execution when opened in Microsoft Excel, Apple Numbers, or Google Sheets.
-- **Unicode Support**: Exported files use UTF-8 with Byte Order Mark (`utf-8-sig`) so multi-language text (including accented, Asian, and Indic scripts) opens without encoding corruption in spreadsheet viewers.
-- **CORS Restricted**: API endpoints include CORS middleware with configurable origins.
+References:
+
+- [OpenStreetMap Copyright and License](https://www.openstreetmap.org/copyright)
+- [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/)
+- [Overpass API Documentation](https://wiki.openstreetmap.org/wiki/Overpass_API)
+
+## 🛣️ Roadmap
+
+Potential future improvements:
+
+- [ ] Persistent search history using SQLite
+- [ ] More category mappings and configurable search filters
+- [ ] Improved pagination and multi-location search jobs
+- [ ] Enhanced CSV and Excel export workflows
+- [ ] Search-job diagnostics and clearer failure reporting
+- [ ] Optional local OpenStreetMap dataset support
+- [ ] More automated frontend integration tests
+- [ ] Docker-based local deployment
+
+Roadmap items are proposals, not claims that the features are already implemented.
+
+## 🤝 Contributing
+
+Ideas, bug reports, and improvements are welcome.
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Make a focused change.
+4. Run the relevant tests and production build.
+5. Open a pull request explaining the change.
+
+Please include reproduction steps when reporting a bug.
+
+## 📄 License
+
+Choose and add a repository license before redistributing this project. Until a license is included, do not assume that the source code is available for unrestricted reuse.
+
+## ◈ Built with Aveniq
+
+**Discover locally. Structure intelligently. Build freely.**
+
+[Launch Aveniq Data Scraper](https://scraper-pi-one.vercel.app) · [GitHub Repository](https://github.com/NiTrOxYT/business_data_scraper)
